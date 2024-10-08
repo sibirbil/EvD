@@ -13,18 +13,25 @@ def langevin_step(
     x_next = x - eta*g + jnp.sqrt(2*eta)*xi
     return x_next, xi
 
+def ULA_chain(state, hyps, NSteps):
+    x, key = state
+    _, grad_func, eta = hyps
+    g = grad_func(x)
+
+    def f(carry, _):
+        x, key = carry
+        key, subkey = random.split(key)
+        x_next, _ = langevin_step(x,g,eta,key)
+        return (x_next, key), x_next
+    
+    init_carry = (x,key)
+    return jax.lax.scan(f, init_carry, None, length = NSteps)
+
 def F(x):
  	return (x**4)/10 + (x**3)/10 - (x**2)
 
 F_grad = jax.grad(F)
 
-def langevin_chain(x_start, grad_func, eta, key, nStep):
-    x_next = x_start
-    for iStep in range(nStep):
-        key, _ = random.split(key)
-        g = grad_func(x_next)
-        x_next, _  = langevin_step(x_next, g, eta, key)
-    return x_next
 
 hyps0 = (F, F_grad, 0.1)
 
