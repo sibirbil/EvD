@@ -17,7 +17,7 @@ x1 = X[:, 0] + np.random.normal(0, 3, X.shape[0])
 x2 = X[:, 1] + np.random.normal(0, 10, X.shape[0])
 
 meshsize = 50
-x_pred = np.linspace(6, 24, meshsize)  # range of porosity values
+x_pred = np.linspace(6, 25, meshsize)  # range of porosity values
 y_pred = np.linspace(0, 100, meshsize)  # range of brittleness values
 xx_pred, yy_pred = np.meshgrid(x_pred, y_pred)
 model_viz = np.array([xx_pred.flatten(), yy_pred.flatten()]).T
@@ -32,42 +32,64 @@ fig = plt.figure(figsize=(20, 15))
 
 ax = fig.add_subplot(projection="3d")
 
-ax.plot(x1, x2, y, color="b", zorder=15, linestyle="none", marker="o", alpha=0.5)
+ax.scatter(x1, x2, y, s=50, facecolors="none", edgecolors="b", alpha=0.5)
+
 ax.plot_surface(
     xx_pred,
     yy_pred,
     predicted.reshape(meshsize, meshsize),
-    cmap=cm.viridis,
+    cmap=cm.Spectral,
     linewidth=0,
     antialiased=False,
 )
 ax.set_xlabel("$x_1$", fontsize=12)
 ax.set_ylabel("$x_2$", fontsize=12)
 ax.set_zlabel("y", fontsize=12)
-ax.set_title("Give me some favorite samples that have output between 4000 and 5000")
-# ax.locator_params(nbins=4, axis="x")
-# ax.locator_params(nbins=5, axis="x")
-
 
 T = 1000
 N = X.shape[0]
 D = np.column_stack((X, np.ones(X.shape[0])))
-# checkthetathat = np.linalg.lstsq(D, y, rcond=None)[0]
 thetahat = np.linalg.inv(D.T @ D) @ D.T @ y
 xbar = np.mean(X, axis=0)
 
 yhat = D @ thetahat
 ybarhat = np.mean(yhat)
 
-# covXyhat = (X - xbar).T @ (yhat - ybarhat) / (X.shape[0] - 1) # denominatorda -1 olmayacak mı?
-covXyhat = (X - xbar).T @ (yhat - ybarhat) / (N)
+covXyhat = (X - xbar).T @ (yhat - ybarhat) / (N)  #  N-1 in the denominator?
 varyhat = np.var(yhat, ddof=1)
 
 
-batchsize = 30
-for _ in range(batchsize):
+testsize = 10
 
-    w = 4000 + (np.random.rand() * 1000)
+# Data infidelity
+x1test = 20 + np.random.random_sample(testsize) * 5.0
+x2test = 90 + np.random.random_sample(testsize) * 10.0
+
+# Data fidelity
+# x1test = 13 + np.random.random_sample(testsize) * 4.0
+# x2test = 40 + np.random.random_sample(testsize) * 20.0
+
+
+testdata = np.column_stack((x1test, x2test))
+predictions = model.predict(testdata)
+
+ax.scatter(
+    x1test, x2test, predictions, s=50, facecolors="none", edgecolors="k", alpha=0.5
+)
+ax.scatter(x1test, x2test, 0.0, s=50, color="k", alpha=0.5)
+i = 0
+for x0 in testdata:
+    ax.plot(
+        [x0[0], x0[0]],
+        [x0[1], x0[1]],
+        [0.0, predictions[i]],
+        color="k",
+        linestyle="--",
+        alpha=0.2,
+    )
+    i += 1
+
+for w in predictions:
 
     fhat = xbar + (covXyhat / (varyhat + T)) * (w - ybarhat)
     ksi = thetahat[:-1]
@@ -75,10 +97,10 @@ for _ in range(batchsize):
     sigma = np.linalg.inv(sigmainv)
 
     x0 = np.random.multivariate_normal(mean=fhat, cov=sigma)
+    ax.scatter(x0[0], x0[1], w, s=50, facecolors="none", edgecolors="r", alpha=0.5)
+    ax.scatter(x0[0], x0[1], 0.0, s=50, color="r", alpha=0.5)
     ax.plot(
-        x0[0], x0[1], w, color="r", zorder=15, linestyle="none", marker="s", alpha=0.5
+        [x0[0], x0[0]], [x0[1], x0[1]], [0.0, w], color="r", linestyle="--", alpha=0.2
     )
 
 plt.show()
-
-print()
