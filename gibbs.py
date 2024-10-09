@@ -14,23 +14,22 @@ def langevin_step(
     return x_next, xi
 
 def ULA_chain(state, hyps, NSteps):
-    x, key = state
     _, grad_func, eta = hyps
-    g = grad_func(x)
+    
 
     def f(carry, _):
         x, key = carry
+        g = grad_func(x)
         key, subkey = random.split(key)
         x_next, _ = langevin_step(x,g,eta,key)
-        return (x_next, key), x_next
+        return (x_next, subkey), x_next
     
-    init_carry = (x,key)
-    return jax.lax.scan(f, init_carry, None, length = NSteps)
+    return jax.lax.scan(f, state, None, length = NSteps)
 
 def F(x):
  	return (x**4)/10 + (x**3)/10 - (x**2)
 
-F_grad = jax.grad(F)
+F_grad = jax.grad(lambda x: jnp.reshape(F(x),()))
 
 
 hyps0 = (F, F_grad, 0.1)
@@ -41,11 +40,10 @@ def acceptance_ratio(x, x_maybe, xi, hyps):
     w = x - x_maybe + eta*grad_func(x_maybe)
     v = (1/(4*eta))*jnp.inner(w,w)
     u = 1/2* jnp.inner(xi,xi) - func(x_maybe) + func(x) - v
-    return jnp.exp(jnp.minimum(u,0))
+    return jnp.reshape(jnp.exp(jnp.minimum(u,0)),())
 
 def MALA_step(state, hyps):
     func, grad_func, eta = hyps
-    x, key = state
 
     def main_func(carry):
         x, key, _, _ = carry
@@ -70,12 +68,12 @@ def MALA_step(state, hyps):
         u = jax.random.uniform(accept_key)
         return u > alpha
         
-    init_carry = (x, key, x, 0.0)
+    init_carry = (state[0], state[1], state[0], 0.0)
     final_carry = jax.lax.while_loop(cond_func, main_func, init_carry) 
 
     accepted_x, _ ,_ ,_ = final_carry
 
-    return accepted_x, key
+    return accepted_x, state[1]
 
 
 def MALA_chain(state, hyps, NSteps):
