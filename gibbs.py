@@ -9,13 +9,18 @@ def langevin_step(
         eta,            # step size
         key             # random number generator key
         ):
+    """
+    Calculates the next step in Langevin dynamics.
+    It also outputs the random noise added to be used 
+    in the calculation of the accceptance ratio for 
+    the Metropolis Adjusted Langevin Algorithm (MALA).
+    """
     xi = random.normal(key,shape = x.shape)
     x_next = x - eta*g + jnp.sqrt(2*eta)*xi
     return x_next, xi
 
 def ULA_chain(state, hyps, NSteps):
-    _, grad_func, eta = hyps
-    
+    _, grad_func, eta = hyps    # the function value is not required for ULA
 
     def f(carry, _):
         x, key = carry
@@ -53,19 +58,18 @@ def MALA_step(state, hyps):
         x_maybe, xi = langevin_step(x, g, eta, key)
         alpha = acceptance_ratio(x, x_maybe, xi, hyps)
         
-        def accept(carry):
-            return x_maybe, key
+        def accept():
+            return x_maybe
         
-        def reject(carry):
-            return x, key
+        def reject():
+            return x
         
         u = jax.random.uniform(accept_key)
-        x_next, _ = jax.lax.cond(u <= alpha, accept, reject, carry)
-        return x_next, accept_key, x_maybe, alpha
+        x_next = jax.lax.cond(u <= alpha, accept, reject)
+        return x_next, key, u, alpha
     
     def cond_func(carry):
-        _, accept_key, _, alpha = carry
-        u = jax.random.uniform(accept_key)
+        _, _, u, alpha = carry
         return u > alpha
         
     init_carry = (state[0], state[1], state[0], 0.0)
@@ -80,7 +84,7 @@ def MALA_chain(state, hyps, NSteps):
     def f(carry,_):
         x_next, key = MALA_step(carry, hyps)
         return (x_next, key), x_next
-    return jax.lax.scan(f, state, None, NSteps)
+    return jax.lax.scan(f, state, None, length = NSteps)
 
 
 import matplotlib.pyplot as plt
