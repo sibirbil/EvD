@@ -47,37 +47,35 @@ def acceptance_ratio(x, x_maybe, xi, hyps):
     u = 1/2* jnp.inner(xi,xi) - func(x_maybe) + func(x) - v
     return jnp.reshape(jnp.exp(jnp.minimum(u,0)),())
 
+
 def MALA_step(state, hyps):
     func, grad_func, eta = hyps
-
-    def main_func(carry):
-        x, key, _, _ = carry
-        key, accept_key = random.split(key)
+    x, key = state
     
-        g = grad_func(x)
-        x_maybe, xi = langevin_step(x, g, eta, key)
-        alpha = acceptance_ratio(x, x_maybe, xi, hyps)
-        
-        def accept():
-            return x_maybe
-        
-        def reject():
-            return x
-        
-        u = jax.random.uniform(accept_key)
-        x_next = jax.lax.cond(u <= alpha, accept, reject)
-        return x_next, key, u, alpha
+    key, accept_key = random.split(key)
     
-    def cond_func(carry):
-        _, _, u, alpha = carry
-        return u > alpha
-        
-    init_carry = (state[0], state[1], state[0], 0.0)
-    final_carry = jax.lax.while_loop(cond_func, main_func, init_carry) 
+    g = grad_func(x)
+    x_maybe, xi = langevin_step(x, g, eta, key)
+    
+    # Compute acceptance ratio
+    alpha = acceptance_ratio(x, x_maybe, xi, hyps)
+    
+    # Define acceptance and rejection steps
+    def accept():
+        return x_maybe
 
-    accepted_x, _ ,_ ,_ = final_carry
+    def reject():
+        return x
+    
+    # Draw uniform random number for the acceptance test
+    u = jax.random.uniform(accept_key)
+    
+    # Decide whether to accept or reject the proposal
+    x_next = jax.lax.cond(u <= alpha, accept, reject)
 
-    return accepted_x, state[1]
+    # Return the accepted (or rejected) state and the updated random key
+    return x_next, key
+
 
 
 def MALA_chain(state, hyps, NSteps):
