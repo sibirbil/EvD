@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 import jax.random as random
-from functools import partial
 
 def langevin_step(
         x:jax.Array,    # current position
@@ -90,29 +89,4 @@ def MALA_chain(state, hyps, NSteps):
     return jax.lax.scan(f, state, None, length = NSteps)
 
 
-import matplotlib.pyplot as plt
 
-def plot_trajectory_histogram(trajectory, bins=50):
-    plt.figure(figsize=(8, 6))
-    
-    # Plot histogram of the 1D trajectory
-    plt.hist(trajectory, bins=bins, density=True, color='blue', alpha=0.7)
-    
-    # Add labels and title
-    plt.xlabel('Position')
-    plt.ylabel('Density')
-    plt.title('Histogram of MALA Trajectory')
-
-    # Show the plot
-    plt.grid(True)
-    plt.show()
-
-#def MALA(xs, func, grad_func, eta, key, nSteps):
-    
-#jax.lax.scan()
-
-# jnp.exp(3)
-
-# key = random.PRNGKey(0)
-# key, _ = random.split(key)
-# random.normal(key)
