@@ -4,11 +4,11 @@ import jax.numpy as jnp
 
 
 def logistic_loss(
-        xs      :jax.Array,         # data
+        xs      :jax.Array,         # data in N x d
         ts      :jax.Array,         # labels given as +1 -1
         thetas  :jax.Array,         # parameters, where last entry is the bias term
         )-> jnp.float_:
-    x_appended = _append1(xs)
+    x_appended = _append1(xs) 
     loss = jnp.mean(jax.nn.softplus(-ts*(x_appended @ thetas.transpose()))) 
     return loss
 

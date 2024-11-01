@@ -55,7 +55,7 @@ def plot_lines_and_dots(
         newX    - same as X1 and X2 but depicted in green, if none then skipped.
     """
     # Define x values for plotting
-    x_vals = jnp.linspace(-5, 5, 100)
+    x_vals = jnp.linspace(-7, 7, 100)
 
     # Create the figure
     plt.figure(figsize=(10, 10))
@@ -76,8 +76,8 @@ def plot_lines_and_dots(
     if newX is not None:
         plt.scatter(newX[:,0], newX[:, 1], c = 'green', alpha = 0.1)
 
-    plt.xlim(-5, 5)
-    plt.ylim(-5, 5)
+    plt.xlim(-7, 7)
+    plt.ylim(-7, 7)
     plt.xlabel('x')
     plt.ylabel('y')
     plt.title('Decision Boundaries')
