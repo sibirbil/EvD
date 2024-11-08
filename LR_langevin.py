@@ -26,17 +26,44 @@ def F_function(
     return F, jax.grad(F)
 
 
-theta_0 = jnp.array([100.,30.,-1000.])
+theta_0 = jnp.array([1.,1.,1.])
+#theta_0 = jnp.array([100.,30.,-1000.])
+step_size_gd = 0.001  # Gradient descent step size
+num_gd_steps = 1000  # Number of steps
+
+# Gradient descent
+F, gradF = F_function(X, y)
+theta = theta_0
+loss_values = []
+tolerance = 0.001  
+
+for i in range(num_gd_steps):
+    loss = F(theta)
+    loss_values.append(loss)  # Store current loss
+    
+    # Stopping condition
+    if i > 0 and abs(loss_values[-2] - loss) / loss_values[-2] < tolerance:
+        break
+    
+    gradients = gradF(theta)
+    theta = theta - step_size_gd * gradients
+    
+    # Additional stop condition for small gradients
+    if jnp.linalg.norm(gradients) < 1e-3:
+        break
+
+theta_0 = theta
+
+
 key = random.PRNGKey(42)
 key, subkey = random.split(key)
 
 state_theta = (theta_0, key)
-F, gradF = F_function(X, y)
-hypsF = (F, gradF, 0.0001) #last entry is step size
+hypsF = (F, gradF, 0.01) #last entry is step size
 
-(last, last_key), traj_theta = langevin.MALA_chain(state_theta, hypsF, 1000000)
+(last, last_key), traj_theta = langevin.MALA_chain(state_theta, hypsF, 100000)
 
-thetas = traj_theta[999900:]
+thetas = traj_theta[99990:]
 
 def G_function(
         thetas      :jax.Array,

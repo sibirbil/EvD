@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from sklearn import linear_model
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
+from sklearn.preprocessing import StandardScaler
 
 
 file = "./unconv_MV_v5.csv"
@@ -11,14 +12,16 @@ df = pd.read_csv(file)
 
 X = df[["Por", "Brittle"]].values.reshape(-1, 2)
 y = df["Prod"]
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
 
-
-x1 = X[:, 0] + np.random.normal(0, 3, X.shape[0])
-x2 = X[:, 1] + np.random.normal(0, 10, X.shape[0])
+x1 = X[:, 0] + np.random.normal(0, 0.01, X.shape[0])
+x2 = X[:, 1] + np.random.normal(0, 0.05, X.shape[0])
 
 meshsize = 50
-x_pred = np.linspace(6, 25, meshsize)  # range of porosity values
-y_pred = np.linspace(0, 100, meshsize)  # range of brittleness values
+x_pred = np.linspace(-1, 1, meshsize)  # range of porosity values
+y_pred = np.linspace(-1, 1, meshsize)  # range of brittleness values
+
 xx_pred, yy_pred = np.meshgrid(x_pred, y_pred)
 model_viz = np.array([xx_pred.flatten(), yy_pred.flatten()]).T
 
@@ -46,7 +49,7 @@ ax.set_xlabel("$x_1$", fontsize=12)
 ax.set_ylabel("$x_2$", fontsize=12)
 ax.set_zlabel("y", fontsize=12)
 
-T = 1000
+T = 10
 N = X.shape[0]
 D = np.column_stack((X, np.ones(X.shape[0])))
 thetahat = np.linalg.inv(D.T @ D) @ D.T @ y
@@ -66,17 +69,19 @@ x1test = 20 + np.random.random_sample(testsize) * 5.0
 x2test = 90 + np.random.random_sample(testsize) * 10.0
 
 # Data fidelity
-# x1test = 13 + np.random.random_sample(testsize) * 4.0
-# x2test = 40 + np.random.random_sample(testsize) * 20.0
+x1test = 13 + np.random.random_sample(testsize) * 4.0
+x2test = 40 + np.random.random_sample(testsize) * 20.0
 
 
 testdata = np.column_stack((x1test, x2test))
+testdata = scaler.transform(testdata)
+
 predictions = model.predict(testdata)
 
 ax.scatter(
-    x1test, x2test, predictions, s=50, facecolors="none", edgecolors="k", alpha=0.5
+    testdata[:,0], testdata[:,1], predictions, s=50, facecolors="none", edgecolors="k", alpha=0.5
 )
-ax.scatter(x1test, x2test, 0.0, s=50, color="k", alpha=0.5)
+ax.scatter(testdata[:,0], testdata[:,1], 0.0, s=50, color="k", alpha=0.5)
 i = 0
 for x0 in testdata:
     ax.plot(
