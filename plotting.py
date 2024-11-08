@@ -84,3 +84,28 @@ def plot_lines_and_dots(
     plt.grid(True)
     plt.show()
 
+
+def show_mnist_example(image, label):
+    # Display the image and label
+    label = int(jnp.argmax(label))
+    plt.imshow(image, cmap='gray')
+    plt.title(f'Label: {label}')
+    plt.axis('off')  # Hide the axes
+    plt.show()
+
+from matplotlib.animation import FuncAnimation
+
+def animate(images):
+
+    # Set up the figure and display the first frame
+    fig, ax = plt.subplots()
+    im = ax.imshow(images[0], cmap='gray')  # Show the first frame with a colormap
+
+    # Function to update the image data for each frame
+    def animate(frame):
+        im.set_array(images[frame])  # Update the data for imshow
+        return im,
+
+    # Create the animation
+    ani = FuncAnimation(fig, animate, frames=images.shape[0], interval=200, blit=True)
+    plt.show()

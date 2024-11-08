@@ -1,6 +1,46 @@
 import jax
 import jax.numpy as jnp
 import jax.random as random
+from jax.tree_util import tree_map, tree_unflatten, tree_structure, tree_leaves, tree_reduce
+from functools import partial
+
+def leaf_langevin(
+    x       :jax.Array,
+    g       :jax.Array,
+    xi      :jax.Array,
+    eta     :jnp.float_
+):
+    return x - eta*g + jnp.sqrt(2*eta)*xi
+
+
+
+def pytree_langevin_step(
+        x,    # current position (PyTree of arrays)
+        g,    # gradient of function at position x (PyTree of arrays with same structure as x)
+        eta,  # step size (float)
+        key   # random number generator key (PRNGKey)
+    ):
+    """
+    Calculates the next step in Langevin dynamics for PyTree inputs.
+    It outputs both the new position x_next and the random noise xi added 
+    to each element, for use in calculating the acceptance ratio in MALA.
+    """
+
+    # Split key to generate unique sub-keys for each leaf in the PyTree
+    keys = random.split(key, num = len(tree_leaves(x)))
+    keys_tree = tree_unflatten(tree_structure(x), keys)
+
+    # Generate noise for each leaf in the PyTree
+    xi = tree_map(lambda k, leaf: random.normal(k, shape=leaf.shape), keys_tree, x)
+    
+    leaf_langevin_with_eta = partial(leaf_langevin, eta = eta)
+
+    # Apply the single-step update across each leaf in the PyTree
+    x_next = tree_map(leaf_langevin_with_eta, x, g, xi)
+
+    return x_next, xi
+
+
 
 def langevin_step(
         x:jax.Array,    # current position
@@ -57,8 +97,8 @@ def MALA_step(state, hyps):
     # inlaid function for convenience computes
     def acceptance_ratio():
         w = x - x_maybe + eta*grad_func(x_maybe)
-        v = (1/(4*eta))*jnp.inner(w,w)
-        u = 1/2* jnp.inner(xi,xi) - func(x_maybe) + func(x) - v
+        v = (1/(4*eta)) * jnp.sum(jnp.square(w)) 
+        u = (1/(4*eta)) * jnp.sum(jnp.square(xi)) - func(x_maybe) + func(x) - v
         return jnp.reshape(jnp.exp(jnp.minimum(u,0)),())
 
     # Compute acceptance ratio
@@ -89,4 +129,55 @@ def MALA_chain(state, hyps, NSteps):
     return jax.lax.scan(f, state, None, length = NSteps)
 
 
+def pytree_MALA_step(
+        state,
+        hyps
+    ):
+    """
+    Performs a MALA step for PyTree inputs. Proposes a new position based on Langevin dynamics 
+    and then accepts or rejects it based on the acceptance probability.
+    """
+    
+    x, key = state
+    func, grad_func, eta = hyps
+    g = grad_func(x)    # a pytree in the same structure as x
 
+    # update key and use the second for acceptance ratio
+    key, accept_key = random.split(key)
+ 
+    # Propose a new langevin step
+    x_proposed, xi = pytree_langevin_step(x, g, eta, key)
+
+    # compute the gradient at the proposal
+    g_proposed = grad_func(x_proposed)
+
+    # Compute acceptance ratio
+    def leaf_log_proposal_ratio(x_leaf, x_proposed_leaf, g_proposed_leaf, xi_leaf):
+        """Computes the forward-reverse proposal log-probability difference for one leaf."""
+        forward = -jnp.sum(jnp.square(xi_leaf)) / (4 * eta)
+        reverse = -jnp.sum(jnp.square(x_leaf - x_proposed_leaf + eta * g_proposed_leaf)) / (4 * eta)
+        return reverse - forward
+
+    # Sum the proposal log-probability ratios over all leaves
+    log_proposal_ratio = tree_reduce(lambda a, b: a + b, tree_map(leaf_log_proposal_ratio, x, x_proposed, g_proposed, xi))
+    
+    # Compute acceptance probability
+    log_acceptance_ratio = -func(x_proposed) + func(x) + log_proposal_ratio
+    acceptance_prob = jnp.minimum(1.0, jnp.exp(log_acceptance_ratio))
+
+    # Generate random uniform value to decide acceptance
+    uniform_sample = random.uniform(accept_key)
+    accepted = uniform_sample < acceptance_prob
+
+    # Choose whether to accept or reject the proposal
+    x_next = tree_map(lambda x_p, x_c: jnp.where(accepted, x_p, x_c), x_proposed, x)
+
+    return x_next, key
+
+
+
+def pytree_MALA_chain(state, hyps, NSteps):
+    def f(carry,_):
+        x_next, key = pytree_MALA_step(carry, hyps)
+        return (x_next, key), x_next
+    return jax.lax.scan(f, state, None, length = NSteps)

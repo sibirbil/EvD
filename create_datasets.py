@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as random
 from sklearn.datasets import make_moons
-
+import numpy as np
 
 X, y = make_moons(n_samples=1000, noise=.1, random_state = 42)
 X1 = jnp.array(X[y==1])
@@ -63,3 +63,43 @@ key1 = random.PRNGKey(42)
 samples1 = create_mixture_of_gaussians(num_samples, means1, sqrt_covs, weights, key1)
 key2 = random.PRNGKey(641)
 samples2 = create_mixture_of_gaussians(num_samples, means2, sqrt_covs, weights, key2)
+
+
+from datasets import load_dataset, Features, Array2D, Array3D
+
+
+def preprocess(example):
+    example["image"] = example['image']/255.0  # Convert the image to a jnp array
+    example["label"] = jax.nn.one_hot(example['label'], 10)
+    return example
+
+
+def get_MNIST(
+    split   : str, #'test' or 'train'
+):
+    MNIST = load_dataset("mnist", split = split)
+    MNIST.set_format('numpy')
+    MNIST = MNIST.map(preprocess)
+
+    features = Features({**MNIST.features, 'image':Array2D(dtype = 'float32', shape = (28,28) )})
+    nothing= lambda x : x
+    MNIST = MNIST.map(nothing, features = features)
+    
+    MNIST.set_format("jax")
+    return MNIST
+
+def get_CIFAR(
+    split   : str, #'test' or 'train'
+):
+    CIFAR = load_dataset("cifar10", split=split)
+    CIFAR = CIFAR.rename_column("img", "image")
+
+    CIFAR.set_format("numpy")
+    CIFAR = CIFAR.map(preprocess)
+    
+    features = Features({**CIFAR.features, 'image':Array3D(dtype = 'float32', shape=(32,32,3))})
+    nothing = lambda x : x
+    CIFAR = CIFAR.map(nothing, features = features)
+    
+    CIFAR.set_format("jax")
+    return CIFAR
