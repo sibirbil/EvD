@@ -24,6 +24,34 @@ class MLP(nn.Module):
         return x
 
 
+class LeNet5(nn.Module):
+    num_classes: int = 10  # Number of output classes,
+    conv_features   : Tuple[int] = 6,16
+    fc_features     : Tuple[int] = 120, 84
+    paddings        : Tuple[str] = 'SAME', 'VALID'
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        # adding an explicit channel dimension if not there
+        # batch dimension is always assumed to be there
+        if len(x.shape) == 3:
+            x = x[..., jnp.newaxis] 
+        
+        for feature, padding in zip(self.conv_features, self.paddings):
+            x = nn.Conv(features=feature, kernel_size=(5, 5), strides=(1, 1), padding = padding)(x)
+            x = nn.sigmoid(x)
+            x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+        
+        x = x.reshape((x.shape[0], -1))  
+        
+        for feature in self.fc_features:
+            x = nn.Dense(features=feature)(x)
+            x = nn.sigmoid(x)
+        
+        x = nn.Dense(features=self.num_classes)(x)
+        return x
+
+
 def cross_entropy_loss(logits, labels):
     return -jnp.mean(jnp.sum(labels * jax.nn.log_softmax(logits), axis=-1))
 
