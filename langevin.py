@@ -15,10 +15,10 @@ def leaf_langevin(
 
 
 def pytree_langevin_step(
+        key,  # random number generator key (PRNGKey)
         x,    # current position (PyTree of arrays)
         g,    # gradient of function at position x (PyTree of arrays with same structure as x)
         eta,  # step size (float)
-        key   # random number generator key (PRNGKey)
     ):
     """
     Calculates the next step in Langevin dynamics for PyTree inputs.
@@ -43,11 +43,11 @@ def pytree_langevin_step(
 
 
 def langevin_step(
-        x:jax.Array,    # current position
-        g:jax.Array,    # gradient of function at position x
-        eta,            # step size
-        key             # random number generator key
-        ):
+    key,                   # random number generator key
+    x       :jax.Array,    # current position
+    g       :jax.Array,    # gradient of function at position x
+    eta,                   # step size
+    ):
     """
     Calculates the next step in Langevin dynamics.
     It also outputs the random noise added to be used 
@@ -62,11 +62,11 @@ def ULA_chain(state, hyps, NSteps):
     _, grad_func, eta = hyps    # the function value is not required for ULA
 
     def f(carry, _):
-        x, key = carry
+        key, x = carry
         g = grad_func(x)
         key, subkey = random.split(key)
-        x_next, _ = langevin_step(x,g,eta,key)
-        return (x_next, subkey), x_next
+        x_next, _ = langevin_step(key, x, g, eta)
+        return (subkey, x_next), x_next
     
     return jax.lax.scan(f, state, None, length = NSteps)
 
@@ -86,13 +86,13 @@ def MALA_step(state, hyps):
     Which either accepts the Langevin step or stays at current point.
     Either case also outputs a new pseudorandom number generator key.
     """
+    key, x = state
     func, grad_func, eta = hyps
-    x, key = state
     
     key, accept_key = random.split(key)
     
     g = grad_func(x)
-    x_maybe, xi = langevin_step(x, g, eta, key)
+    x_maybe, xi = langevin_step(key, x, g, eta)
     
     # inlaid function for convenience computes
     def acceptance_ratio():
@@ -118,14 +118,14 @@ def MALA_step(state, hyps):
     x_next = jax.lax.cond(u <= alpha, accept, reject)
 
     # Return the accepted (or rejected) state and the updated random key
-    return x_next, key
+    return key, x_next
 
 
 
 def MALA_chain(state, hyps, NSteps):
     def f(carry,_):
-        x_next, key = MALA_step(carry, hyps)
-        return (x_next, key), x_next
+        key, x_next = MALA_step(carry, hyps)
+        return (key, x_next), x_next
     return jax.lax.scan(f, state, None, length = NSteps)
 
 
@@ -138,7 +138,7 @@ def pytree_MALA_step(
     and then accepts or rejects it based on the acceptance probability.
     """
     
-    x, key = state
+    key, x = state
     func, grad_func, eta = hyps
     g = grad_func(x)    # a pytree in the same structure as x
 
@@ -146,7 +146,7 @@ def pytree_MALA_step(
     key, accept_key = random.split(key)
  
     # Propose a new langevin step
-    x_proposed, xi = pytree_langevin_step(x, g, eta, key)
+    x_proposed, xi = pytree_langevin_step(key, x, g, eta)
 
     # compute the gradient at the proposal
     g_proposed = grad_func(x_proposed)
@@ -172,12 +172,12 @@ def pytree_MALA_step(
     # Choose whether to accept or reject the proposal
     x_next = tree_map(lambda x_p, x_c: jnp.where(accepted, x_p, x_c), x_proposed, x)
 
-    return x_next, key
+    return key, x_next
 
 
 
 def pytree_MALA_chain(state, hyps, NSteps):
     def f(carry,_):
-        x_next, key = pytree_MALA_step(carry, hyps)
-        return (x_next, key), x_next
+        key, x_next = pytree_MALA_step(carry, hyps)
+        return (key, x_next), x_next
     return jax.lax.scan(f, state, None, length = NSteps)

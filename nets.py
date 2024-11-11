@@ -83,11 +83,9 @@ def train_step(
 
 
 @jax.jit
-def eval_step(
-    state       : TrainState,
-    batch
-    ):
-    logits = state.apply_fn(state.params, batch['image'])
+def eval_step(ts : TrainState, batch : Dataset):
+
+    logits = ts.apply_fn(ts.params, batch['image'])
     accuracy = compute_accuracy(logits, batch['label'])
     loss = cross_entropy_loss(logits, batch['label'])
     return accuracy, loss
@@ -128,7 +126,7 @@ def train(
         if iStep%100==0:
             idx = random.randint(subkey, 1000, 0, len(ds))
             accuracy, loss = eval_step(ts, ds[idx]) 
-            print(f"Batches processed:{iStep}, Accuracy: {accuracy}, loss: {loss}")    
+            print(f"Batches: {iStep},\tTrain Acc: {accuracy:.2%},\tloss: {loss:.4f}")    
     return ts
 
 import matplotlib.pyplot as plt
