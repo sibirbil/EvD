@@ -6,7 +6,7 @@ import langevin
 import jax.random as random
 
 X = LRExample.X
-y = (LRExample.y).to_numpy()
+y = LRExample.y
 
 X = jnp.array(X)
 y = jnp.array(y)
@@ -31,11 +31,12 @@ theta_0 = jnp.array([1.,1.,1.])
 step_size_gd = 0.001  # Gradient descent step size
 num_gd_steps = 1000  # Number of steps
 
+
 # Gradient descent
 F, gradF = F_function(X, y)
 theta = theta_0
 loss_values = []
-tolerance = 0.001  
+tolerance = 0.0001  
 
 for i in range(num_gd_steps):
     loss = F(theta)
@@ -59,11 +60,11 @@ key = random.PRNGKey(42)
 key, subkey = random.split(key)
 
 state_theta = (theta_0, key)
-hypsF = (F, gradF, 0.01) #last entry is step size
+hypsF = (F, gradF, 0.1) #last entry is step size
 
-(last, last_key), traj_theta = langevin.MALA_chain(state_theta, hypsF, 100000)
+(last, last_key), traj_theta = langevin.MALA_chain(state_theta, hypsF, 1000)
 
-thetas = traj_theta[99990:]
+thetas = traj_theta[990:]
 
 def G_function(
         thetas      :jax.Array,
@@ -72,7 +73,7 @@ def G_function(
     
     def G(x):
         d = jnp.hstack([x, 1])
-        return jnp.square(jnp.mean(thetas @ d) - y_val)
+        return jnp.mean(jnp.square((thetas @ d) - y_val))*1000
     
     return G, jax.grad(G)
 
@@ -81,10 +82,14 @@ def G_function(
 #testdata = jnp.array([[20, 90]])
 #prediction = LRExample.model.predict(testdata)
 
-x_0 = jnp.array([15.,45.])
+x_0 = jnp.array([-0.5,0.5])
 state_x = (x_0, subkey)
-G, gradG = G_function(thetas, 3852.1)
-hypsG = G, gradG, 0.00001
+G, gradG = G_function(thetas, 0.5)
+#d = jnp.hstack([x_0, 1])
+#multp = thetas @ d
+# thetahat = [ 949.56429071,  442.22484576, 4311.21985212]
+
+hypsG = G, gradG, 0.0001
 
 _, traj_x = langevin.MALA_chain(state_x, hypsG, 1000000)
 
