@@ -15,6 +15,9 @@ y = df["Prod"]
 scaler = StandardScaler()
 X = scaler.fit_transform(X)
 
+y_scaler = StandardScaler()
+y = y_scaler.fit_transform(y.values.reshape(-1, 1))
+
 x1 = X[:, 0] + np.random.normal(0, 0.01, X.shape[0])
 x2 = X[:, 1] + np.random.normal(0, 0.05, X.shape[0])
 
@@ -28,6 +31,9 @@ model_viz = np.array([xx_pred.flatten(), yy_pred.flatten()]).T
 ols = linear_model.LinearRegression()
 model = ols.fit(X, y)
 predicted = model.predict(model_viz)
+
+# Predictions in their original scale
+# predicted = y_scaler.inverse_transform(predicted.reshape(-1, 1))
 
 plt.style.use("default")
 
@@ -59,6 +65,7 @@ yhat = D @ thetahat
 ybarhat = np.mean(yhat)
 
 covXyhat = (X - xbar).T @ (yhat - ybarhat) / (N)  #  N-1 in the denominator?
+covXyhat = covXyhat.flatten()
 varyhat = np.var(yhat, ddof=1)
 
 
@@ -77,22 +84,23 @@ testdata = np.column_stack((x1test, x2test))
 testdata = scaler.transform(testdata)
 
 predictions = model.predict(testdata)
+predictions = predictions.flatten()
+# Predictions in their original scale
+# predictions = y_scaler.inverse_transform(predictions.reshape(-1, 1))
 
 ax.scatter(
     testdata[:,0], testdata[:,1], predictions, s=50, facecolors="none", edgecolors="k", alpha=0.5
 )
 ax.scatter(testdata[:,0], testdata[:,1], 0.0, s=50, color="k", alpha=0.5)
-i = 0
-for x0 in testdata:
+for i, x0 in enumerate(testdata):
     ax.plot(
-        [x0[0], x0[0]],
-        [x0[1], x0[1]],
-        [0.0, predictions[i]],
+        [x0[0], x0[0]],        
+        [x0[1], x0[1]],        
+        [0.0, predictions[i]], 
         color="k",
         linestyle="--",
         alpha=0.2,
     )
-    i += 1
 
 for w in predictions:
 
