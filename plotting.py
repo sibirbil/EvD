@@ -85,13 +85,22 @@ def plot_lines_and_dots(
     plt.show()
 
 
-def show_mnist_example(image, label):
+def show_mnist_example(image):
     # Display the image and label
-    label = int(jnp.argmax(label))
+    plt.figure(figsize=(2, 2))
     plt.imshow(image, cmap='gray')
-    plt.title(f'Label: {label}')
     plt.axis('off')  # Hide the axes
     plt.show()
+
+import matplotlib.colors as mcolors
+
+def show_filters(F): 
+    A = jnp.max(jnp.abs(F))
+    cmap = mcolors.TwoSlopeNorm(vmin=-A, vcenter=0, vmax=A)
+    plt.imshow(F.reshape(28,28), cmap = 'bwr', norm = cmap)
+    plt.colorbar(label = 'Value')
+    plt.show()
+
 
 from matplotlib.animation import FuncAnimation
 

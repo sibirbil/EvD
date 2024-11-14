@@ -3,22 +3,41 @@ import jax.numpy as jnp
 import jax.random as random
 from jax.tree_util import tree_map, tree_unflatten, tree_structure, tree_leaves, tree_reduce
 from functools import partial
+from typing import Tuple
+
+
+# Function for testing 
+def F(x):
+ 	return (x**4)/10 + (x**3)/10 - (x**2)
+
+F_grad = jax.grad(lambda x: jnp.reshape(F(x),()))
+
+hyps = (F, F_grad, 0.1)
+state0 = random.PRNGKey(0), 0.   #starting point of 
+state1 = random.PRNGKey(1), jnp.array(0.)
+state2 = random.PRNGKey(2), jnp.array([0.])
+
 
 def leaf_langevin(
-    x       :jax.Array,
-    g       :jax.Array,
-    xi      :jax.Array,
-    eta     :jnp.float_
+    x       : jax.Array,
+    g       : jax.Array,
+    xi      : jax.Array,
+    eta     : jnp.float_,
+    clip_to : Tuple[jnp.float_ | None, jnp.float_ | None]
 ):
-    return x - eta*g + jnp.sqrt(2*eta)*xi
+    
+    step = x - eta*g + jnp.sqrt(2*eta)*xi
+    a,b = clip_to
+    return jnp.clip(step, min = a, max = b)
 
 
 
-def pytree_langevin_step(
-        key,  # random number generator key (PRNGKey)
-        x,    # current position (PyTree of arrays)
-        g,    # gradient of function at position x (PyTree of arrays with same structure as x)
-        eta,  # step size (float)
+def langevin_step(
+        key,    # random number generator key (PRNGKey)
+        x,      # current position (PyTree of arrays)
+        g,      # gradient of function at position x (PyTree of arrays with same structure as x)
+        eta,    # step size (float)
+        clip_to = [None, None] # projects each step to the preferred interval
     ):
     """
     Calculates the next step in Langevin dynamics for PyTree inputs.
@@ -33,103 +52,15 @@ def pytree_langevin_step(
     # Generate noise for each leaf in the PyTree
     xi = tree_map(lambda k, leaf: random.normal(k, shape=leaf.shape), keys_tree, x)
     
-    leaf_langevin_with_eta = partial(leaf_langevin, eta = eta)
+    leaf_langevin_with_args = partial(leaf_langevin, eta = eta, clip_to=clip_to)
 
     # Apply the single-step update across each leaf in the PyTree
-    x_next = tree_map(leaf_langevin_with_eta, x, g, xi)
+    x_next = tree_map(leaf_langevin_with_args, x, g, xi)
 
     return x_next, xi
 
 
-
-def langevin_step(
-    key,                   # random number generator key
-    x       :jax.Array,    # current position
-    g       :jax.Array,    # gradient of function at position x
-    eta,                   # step size
-    ):
-    """
-    Calculates the next step in Langevin dynamics.
-    It also outputs the random noise added to be used 
-    in the calculation of the accceptance ratio for 
-    the Metropolis Adjusted Langevin Algorithm (MALA).
-    """
-    xi = random.normal(key,shape = x.shape)
-    x_next = x - eta*g + jnp.sqrt(2*eta)*xi
-    return x_next, xi
-
-def ULA_chain(state, hyps, NSteps):
-    _, grad_func, eta = hyps    # the function value is not required for ULA
-
-    def f(carry, _):
-        key, x = carry
-        g = grad_func(x)
-        key, subkey = random.split(key)
-        x_next, _ = langevin_step(key, x, g, eta)
-        return (subkey, x_next), x_next
-    
-    return jax.lax.scan(f, state, None, length = NSteps)
-
-def F(x):
- 	return (x**4)/10 + (x**3)/10 - (x**2)
-
-F_grad = jax.grad(lambda x: jnp.reshape(F(x),()))
-
-
-hyps0 = (F, F_grad, 0.1)
-
-
-
-def MALA_step(state, hyps):
-    """
-    Computes the next step in Metropolis Adjusted Langevin Algorithm.
-    Which either accepts the Langevin step or stays at current point.
-    Either case also outputs a new pseudorandom number generator key.
-    """
-    key, x = state
-    func, grad_func, eta = hyps
-    
-    key, accept_key = random.split(key)
-    
-    g = grad_func(x)
-    x_maybe, xi = langevin_step(key, x, g, eta)
-    
-    # inlaid function for convenience computes
-    def acceptance_ratio():
-        w = x - x_maybe + eta*grad_func(x_maybe)
-        v = (1/(4*eta)) * jnp.sum(jnp.square(w)) 
-        u = (1/(4*eta)) * jnp.sum(jnp.square(xi)) - func(x_maybe) + func(x) - v
-        return jnp.reshape(jnp.exp(jnp.minimum(u,0)),())
-
-    # Compute acceptance ratio
-    alpha = acceptance_ratio()
-    
-    # Define acceptance and rejection steps
-    def accept():
-        return x_maybe
-
-    def reject():
-        return x
-    
-    # Draw uniform random number for the acceptance test
-    u = jax.random.uniform(accept_key)
-    
-    # Decide whether to accept or reject the proposal
-    x_next = jax.lax.cond(u <= alpha, accept, reject)
-
-    # Return the accepted (or rejected) state and the updated random key
-    return key, x_next
-
-
-
-def MALA_chain(state, hyps, NSteps):
-    def f(carry,_):
-        key, x_next = MALA_step(carry, hyps)
-        return (key, x_next), x_next
-    return jax.lax.scan(f, state, None, length = NSteps)
-
-
-def pytree_MALA_step(
+def MALA_step(
         state,
         hyps
     ):
@@ -139,14 +70,15 @@ def pytree_MALA_step(
     """
     
     key, x = state
-    func, grad_func, eta = hyps
+    #deals with cases when no clip_to value is provided or provided as None
+    func, grad_func, eta, *clip_to = (*hyps, None, None)[:5]
     g = grad_func(x)    # a pytree in the same structure as x
 
     # update key and use the second for acceptance ratio
     key, accept_key = random.split(key)
  
     # Propose a new langevin step
-    x_proposed, xi = pytree_langevin_step(key, x, g, eta)
+    x_proposed, xi = langevin_step(key, x, g, eta, clip_to)
 
     # compute the gradient at the proposal
     g_proposed = grad_func(x_proposed)
@@ -175,9 +107,95 @@ def pytree_MALA_step(
     return key, x_next
 
 
-
-def pytree_MALA_chain(state, hyps, NSteps):
+def MALA_chain(state, hyps, NSteps):
     def f(carry,_):
-        key, x_next = pytree_MALA_step(carry, hyps)
+        key, x_next = MALA_step(carry, hyps)
         return (key, x_next), x_next
     return jax.lax.scan(f, state, None, length = NSteps)
+
+
+######################################################
+# Below is an earlier version which only works with  #
+# jax.Array's and not PyTree's. Parameters of neural #
+# networks are structured as PyTrees                 #
+######################################################
+
+# def langevin_step(
+#     key,                   # random number generator key
+#     x       :jax.Array,    # current position
+#     g       :jax.Array,    # gradient of function at position x
+#     eta,                   # step size
+#     ):
+#     """
+#     Calculates the next step in Langevin dynamics.
+#     It also outputs the random noise added to be used 
+#     in the calculation of the accceptance ratio for 
+#     the Metropolis Adjusted Langevin Algorithm (MALA).
+#     """
+#     xi = random.normal(key,shape = x.shape)
+#     x_next = x - eta*g + jnp.sqrt(2*eta)*xi
+#     return x_next, xi
+
+
+
+# def ULA_chain(state, hyps, NSteps):
+#     _, grad_func, eta = hyps    # the function value is not required for ULA
+
+#     def f(carry, _):
+#         key, x = carry
+#         g = grad_func(x)
+#         key, subkey = random.split(key)
+#         x_next, _ = langevin_step(key, x, g, eta)
+#         return (subkey, x_next), x_next
+    
+#     return jax.lax.scan(f, state, None, length = NSteps)
+
+
+
+# def MALA_step(state, hyps):
+#     """
+#     Computes the next step in Metropolis Adjusted Langevin Algorithm.
+#     Which either accepts the Langevin step or stays at current point.
+#     Either case also outputs a new pseudorandom number generator key.
+#     """
+#     key, x = state
+#     func, grad_func, eta = hyps
+    
+#     key, accept_key = random.split(key)
+    
+#     g = grad_func(x)
+#     x_maybe, xi = langevin_step(key, x, g, eta)
+    
+#     # inlaid function for convenience computes
+#     def acceptance_ratio():
+#         w = x - x_maybe + eta*grad_func(x_maybe)
+#         v = (1/(4*eta)) * jnp.sum(jnp.square(w)) 
+#         u = (1/(4*eta)) * jnp.sum(jnp.square(xi)) - func(x_maybe) + func(x) - v
+#         return jnp.reshape(jnp.exp(jnp.minimum(u,0)),())
+
+#     # Compute acceptance ratio
+#     alpha = acceptance_ratio()
+    
+#     # Define acceptance and rejection steps
+#     def accept():
+#         return x_maybe
+
+#     def reject():
+#         return x
+    
+#     # Draw uniform random number for the acceptance test
+#     u = jax.random.uniform(accept_key)
+    
+#     # Decide whether to accept or reject the proposal
+#     x_next = jax.lax.cond(u <= alpha, accept, reject)
+
+#     # Return the accepted (or rejected) state and the updated random key
+#     return key, x_next
+
+
+
+# def MALA_chain(state, hyps, NSteps):
+#     def f(carry,_):
+#         key, x_next = MALA_step(carry, hyps)
+#         return (key, x_next), x_next
+#     return jax.lax.scan(f, state, None, length = NSteps)

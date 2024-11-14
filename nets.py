@@ -8,7 +8,11 @@ from typing import Tuple
 from datasets import Dataset
 
 
+############################
+#### Neural Net Modules ####
+############################
 
+# Standard feed forward multi-layer perceptron
 class MLP(nn.Module):
     features: list
 
@@ -23,12 +27,15 @@ class MLP(nn.Module):
         x = nn.Dense(self.features[-1])(x)
         return x
 
-
+# Classical LeNet5 architecture
 class LeNet5(nn.Module):
     num_classes: int = 10  # Number of output classes,
-    conv_features   : Tuple[int] = 6,16
-    fc_features     : Tuple[int] = 120, 84
-    paddings        : Tuple[str] = 'SAME', 'VALID'
+    conv_features   : Tuple[int] = 6,16     # two convolutional layers
+    fc_features     : Tuple[int] = 120, 84  # followed by two fully connected layers
+    paddings        : Tuple[str] = 'SAME', 'VALID' 
+    # original architecture assumes input of size 32 x 32 
+    # this is equivalent to padding the images by 2 pixels 
+    # in each direction. Thus the first layer gets 'SAME' padding. 
 
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -51,6 +58,9 @@ class LeNet5(nn.Module):
         x = nn.Dense(features=self.num_classes)(x)
         return x
 
+###################
+##### LOSSES ######
+###################
 
 def cross_entropy_loss(logits, labels):
     return -jnp.mean(jnp.sum(labels * jax.nn.log_softmax(logits), axis=-1))
@@ -59,9 +69,30 @@ def compute_accuracy(logits, labels):
     predictions = jnp.argmax(logits, axis=-1)
     return jnp.mean(labels[jnp.arange(len(predictions)),predictions])
 
+
+###################
+#### TRAINING #####
+###################
+
 class TrainState(train_state.TrainState):
     pass
 
+
+def create_train_state(
+        key             : jax.Array, 
+        model           : nn.Module, 
+        fake_batch      : jax.Array, 
+        learning_rate   : jnp.float_,
+        optimizer       : str   = 'adam'
+        ):
+    if optimizer == 'adam':
+        tx = optax.adam(learning_rate)
+    elif optimizer == 'sgd':
+        tx = optax.sgd(learning_rate, momentum = 0.9)
+
+    params = model.init(key, fake_batch)
+
+    return TrainState.create(apply_fn=model.apply, params=params, tx=tx)
 
 
 @jax.jit
@@ -69,9 +100,6 @@ def train_step(
         state   : TrainState, 
         batch   : Tuple[jax.Array, jax.Array]
     )-> Tuple[TrainState, jnp.float_]:
-    """
-        performs 
-    """
     def loss_fn(params):
         logits = state.apply_fn(params, batch['image'])
         loss = cross_entropy_loss(logits, batch['label'])
@@ -91,21 +119,6 @@ def eval_step(ts : TrainState, batch : Dataset):
     return accuracy, loss
 
 
-def create_train_state(
-        key             : jax.Array, 
-        model           : nn.Module, 
-        fake_batch      : jax.Array, 
-        learning_rate   : jnp.float_,
-        optimizer       : str   = 'adam'
-        ):
-    if optimizer == 'adam':
-        tx = optax.adam(learning_rate)
-    elif optimizer == 'sgd':
-        tx = optax.sgd(learning_rate, momentum = 0.9)
-
-    params = model.init(key, fake_batch)
-
-    return TrainState.create(apply_fn=model.apply, params=params, tx=tx)
 
 def train(
     key             : random.PRNGKey,
@@ -129,18 +142,16 @@ def train(
             print(f"Batches: {iStep},\tTrain Acc: {accuracy:.2%},\tloss: {loss:.4f}")    
     return ts
 
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-
-def show_filters(F): 
-    A = jnp.max(jnp.abs(F))
-    cmap = mcolors.TwoSlopeNorm(vmin=-A, vcenter=0, vmax=A)
-    plt.imshow(F.reshape(28,28), cmap = 'bwr', norm = cmap)
-    plt.colorbar(label = 'Value')
-    plt.show()
 
 
 from logistic import l1_reg
+
+def total_variation(image):
+    """
+    Total variation measure 
+    """
+    dx, dy = jnp.array(jnp.gradient(image))
+    return jnp.sum(dx**2 + dy**2)
 
 
 def F_function(
@@ -163,18 +174,20 @@ def F_function(
 from functools import partial
 
 def G_function(
-    params_traj,           # a pytree of parameters with an extra leading dimension
-    model       : nn.Module,
-    label       : int,
-    beta        : jnp.float_,
-    reg_const   : jnp.float_
+    params_traj,            # a pytree of parameters with an extra leading dimension
+    model     : nn.Module,
+    label     : int,        # target label (an integer form 0 to 9)
+    beta      : jnp.float_, # inverse temperature multiplying all of 
+    const1    : jnp.float_, # constant in front of l1 regularization
+    const2    : jnp.float_  # constant multiplying the total variation regularization
     ):
     
+    @jax.jit
     def G(x):
         lbl = jax.nn.one_hot(jnp.array(label), 10)
-        logits = jax.vmap(partial(model.apply, x = jax.nn.relu(x)[jnp.newaxis, :]))(params_traj)
+        logits = jax.vmap(partial(model.apply, x = x[jnp.newaxis, :]))(params_traj)
         losses = (-jax.nn.log_softmax(logits) @ lbl)
-        loss = beta*jnp.mean(losses)
-        return loss + reg_const*l1_reg(x)
+        loss = jnp.mean(losses)
+        return beta*(loss + const1*l1_reg(x) + const2*total_variation(x))
     
     return G, jax.grad(G)
