@@ -6,14 +6,75 @@ import jax.random as random
 from sklearn.datasets import make_classification
 from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder
 
+
+"""
 # Generate a synthetic dataset for a logistic regression 
 X, y = make_classification(n_samples=500, n_features=5, n_informative=3, n_redundant=1, 
                            n_classes=2, random_state=42)
 
+"""
+
+file = "./adult.csv"
+df = pd.read_csv(file)
+
+# some preparation steps
+df.workclass = df.workclass.replace("?", "Private")
+df.occupation.replace(to_replace='?',value=np.nan,inplace=True)
+df['occupation'] = df['occupation'].fillna(method='bfill') 
+df['native-country'] = df['native-country'].replace("?", "United-States")
+
+# Update the income column to numerical values
+df['income'] = df['income'].apply(lambda x: 1 if x.strip() == '>50K' else 0)
+
+# Apply label encoding to the 'education' column
+label_encoder = LabelEncoder()
+df['education'] = label_encoder.fit_transform(df['education'])
+
+df['workclass'] = df['workclass'].replace({
+    'Private': 'private',
+    'Local-gov': 'government',
+    'Federal-gov': 'government',
+    'State-gov': 'government',
+    'Self-emp-not-inc': 'others',
+    'Self-emp-inc': 'others',
+    'Without-pay': 'others',
+    'Never-worked': 'Never-worked'
+})
+
+# remove the categorical variables
+columns_to_remove = ['marital-status', 'occupation', 'relationship', 'native-country']
+df.drop(columns=columns_to_remove, inplace=True)
+
+# Group the 'race' column into 'white' and 'others'
+df['race'] = df['race'].apply(lambda x: 'white' if x.lower() == 'white' else 'others')
+
+# Apply one-hot encoding to the remaining categorical columns
+categorical_columns = df.select_dtypes(include=['object']).columns
+df_encoded = pd.get_dummies(df, columns=categorical_columns, drop_first=True)
+
+
+X = df_encoded.drop(columns=['income'])
+column_names = X.columns.tolist()
+
+X = X.to_numpy()
+X = X.astype(float)
+y = df_encoded['income'].to_numpy()
+
+
+
+#X = df.iloc[:,0:-1].to_numpy()
+#y = df["class"].to_numpy()
+
+#scaler = StandardScaler()
+#X = scaler.fit_transform(X)
+
 
 # Train a logistic regression model
-log_reg = LogisticRegression()
+log_reg = LogisticRegression(max_iter = 10000)
 log_reg.fit(X, y)
 
 # y values between 0 and 1
@@ -22,7 +83,7 @@ y_prob = log_reg.predict_proba(X)[:,1]
 
 # Retrieve the model's theta values with the intercept
 theta_values = list(log_reg.coef_[0]) + [log_reg.intercept_[0]]  # Add intercept to coefficients
-D = jnp.hstack([X, jnp.ones(X.shape[0]).reshape(-1,1)])
+D = jnp.hstack([jnp.array(X), jnp.ones((X.shape[0], 1))])
 logits = D @ jnp.array(theta_values)
 y_prob_test= 1/(1 + jnp.exp(-logits))  
 
@@ -57,40 +118,42 @@ def F_function(
     return F, jax.grad(F)
 
 
-theta_0 = jnp.array([1.,1.,1.,1.,1.,1.])
+# theta_0 = jnp.array([1.,1.,1.,1.,1.,1.])
+len_vec = X.shape[1]+1
+theta_0 = jnp.array(0.5*np.ones(len_vec))
 step_size_gd = 0.001  # Gradient descent step size
-num_gd_steps = 1000  # Number of steps
+num_gd_steps = 3000  # Number of steps
 
 
 # Gradient descent
 F, gradF = F_function(X, y)
 theta = theta_0
-loss_values = []
-tolerance = 0.0001  
+# loss_values = []
+# tolerance = 0.000001  
 
-for i in range(num_gd_steps):
-    loss = F(theta)
-    loss_values.append(loss)  # Store current loss
+# for i in range(num_gd_steps):
+#     loss = F(theta)
+#     loss_values.append(loss)  # Store current loss
     
-    # Stopping condition
-    if i > 0 and abs(loss_values[-2] - loss) / loss_values[-2] < tolerance:
-        break
+#     # Stopping condition
+#     if i > 0 and abs(loss_values[-2] - loss) / loss_values[-2] < tolerance:
+#         break
     
-    gradients = gradF(theta)
-    theta = theta - step_size_gd * gradients
+#     gradients = gradF(theta)
+#     theta = theta - step_size_gd * gradients
     
-    # Additional stop condition for small gradients
-    if jnp.linalg.norm(gradients) < 1e-3:
-        break
+#     # Additional stop condition for small gradients
+#     if jnp.linalg.norm(gradients) < 1e-3:
+#         break
 
-theta_0 = theta
+theta_0 = jnp.array(np.array(theta_values)) #theta
 
 
 key = random.PRNGKey(42)
 key, subkey = random.split(key)
 
 state_theta = (theta_0, key)
-hypsF = (F, gradF, 0.01) #last entry is step size
+hypsF = (F, gradF, 0.0001) #last entry is step size
 
 (last, last_key), traj_theta = langevin.MALA_chain(state_theta, hypsF, 100000)
 
@@ -110,7 +173,7 @@ def G_function(
             d = jnp.hstack([x, 1])
             logits = thetas @ d
             f_xtheta = 1 / (1 + jnp.exp(-logits))  
-            return jnp.mean(jnp.square(f_xtheta - y_val))
+            return jnp.mean(jnp.square(f_xtheta - y_val))*1000
         
         elif loss_type == 2:
             # Loss 2
@@ -130,7 +193,8 @@ def G_function(
     return G, jax.grad(G)
 
 
-x_0 = jnp.array([0.5,0.5, 0.5, 2., -1.])  # initial point
+#x_0 = jnp.array([0.5, 0.5, 0.5, 2., -1.])  # initial point
+x_0 = jnp.array(X[10]) #jnp.array(np.zeros(31))
 
 # Set the loss_type to select the loss function
 # Set to 1 for Loss function 1 (close to the boudnary 0.5)
@@ -144,8 +208,9 @@ if loss_type == 1:
 
 elif loss_type == 2:
     # Parameters for Loss function 2
-    x_s = jnp.array([0.1, 0.3, -1.2, 0.4, 0.1])  # Specific point for Loss function 2
-    G, gradG = G_function(thetas, 0.5, x_s, lambda_=1, loss_type=2)
+    # x_s = jnp.array([0.1, 0.3, -1.2, 0.4, 0.1])  # Specific point for Loss function 2
+    x_s = jnp.array(X[21]) 
+    G, gradG = G_function(thetas, 1, x_s, lambda_=50, loss_type=2)
 
 else:
     raise ValueError("Invalid loss_type.")
@@ -153,24 +218,93 @@ else:
 state_x = (x_0, subkey)
 hypsG = G, gradG, 0.00001
 
-_, traj_x = langevin.MALA_chain(state_x, hypsG, 10000)
+_, traj_x = langevin.ULA_chain(state_x, hypsG, 10000)
 
-last_xs = traj_x[-1000:]
+last_xs = traj_x[-100:]
 
+
+def decode_synthetic_instance(x_i):
+    """
+    Decodes the encoded columns in a synthetic data instance x_i.
+
+    Args:
+        x_i (numpy.ndarray): A single synthetic data instance as a numpy array.
+
+    Returns:
+        tuple: Decoded values for workclass, race, and gender.
+    """
+    # Indices for encoded columns
+    workclass_indices = [7, 8, 9]  # workclass_government, workclass_others, workclass_private
+    race_index = 10  # race_white
+    gender_index = 11  # gender_Male
+
+    # Decode workclass using softmax
+    workclass_logits = x_i[0, workclass_indices]
+    workclass_probabilities = np.exp(workclass_logits) / np.sum(np.exp(workclass_logits))
+    workclass_categories = ['government', 'others', 'private']
+    workclass_decoded = workclass_categories[np.argmax(workclass_probabilities)]
+
+    # Decode race and gender
+    race_decoded = 'white' if x_i[0, race_index] > 0.5 else 'others'
+    gender_decoded = 'Male' if x_i[0, gender_index] > 0.5 else 'Female'
+
+    return workclass_decoded, race_decoded, gender_decoded
+
+decode_synthetic_instance(last_xs[-1:])
+
+
+def compare_synthetic_instances(columns, x_s, x_sample, x_0):
+    """
+    Compares two synthetic data instances and maps their values to columns.
+
+    Args:
+        columns (list): List of column names corresponding to the features.
+        x_s (numpy.ndarray): First synthetic data instance as a numpy array.
+        x_sample (numpy.ndarray): Second synthetic data instance as a numpy array.
+
+    Returns:
+        pd.DataFrame: A DataFrame showing the comparison between the two instances.
+    """
+    if len(x_s) == 0:
+        x_s_flat = np.full(len(columns), np.nan)  # Fill with NaNs if x_s is empty
+    else:
+        x_s_flat = np.array(x_s).flatten()  # Ensure x_s is a numpy array and flattened
+    
+    
+    # Flatten arrays to ensure they are 1D
+    x_sample_flat = x_sample.flatten()
+    x_0_flat = x_0.flatten()
+    
+    # Create a comparison DataFrame
+    comparison = pd.DataFrame({
+        'Column': columns,
+        'x_s': x_s_flat,
+        'x_sample': x_sample_flat,
+        'x_initial': x_0_flat
+    })
+    return comparison
+
+x_sample = last_xs[-1:,]
 
 if loss_type == 1:
-    # Check predictions
-    y_prob_check = log_reg.predict_proba(last_xs)[:, 1] 
-    
-    # Plot distribution
-    plt.figure(figsize=(10, 6))
-    plt.hist(y_prob_check, bins=20, edgecolor='black', color='skyblue', alpha=0.7)
-    plt.axvline(0.5, color='red', linestyle='dashed', linewidth=1, label='0.5')
-    
-    plt.xlabel('Prediction Probabilities')
-    plt.ylabel('Frequency')
-    plt.title('Distribution of Prediction Probabilities Around 0.5')
-    plt.legend()
-    plt.show()
+    comparison_df = compare_synthetic_instances(column_names, [], x_sample, x_0)
+else:
+    comparison_df = compare_synthetic_instances(column_names, x_s, x_sample, x_0)
+
+
+
+# Check predictions
+y_prob_check = log_reg.predict_proba(last_xs)[:, 1] 
+
+# Plot distribution
+plt.figure(figsize=(10, 6))
+plt.hist(y_prob_check, bins=20, edgecolor='black', color='skyblue', alpha=0.7)
+plt.axvline(0.5, color='red', linestyle='dashed', linewidth=1, label='0.5')
+
+plt.xlabel('Prediction Probabilities')
+plt.ylabel('Frequency')
+plt.title('Distribution of Prediction Probabilities Around 0.5')
+plt.legend()
+plt.show()
 
 
