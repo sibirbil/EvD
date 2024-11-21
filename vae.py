@@ -7,8 +7,10 @@ import optax
 from typing import Tuple
 from datasets import Dataset
 
+###############################
+# NON-VARIATIONAL AutoEncoder #
+###############################
 
-# AutoEncoder 
 # architecture taken from
 # https://colab.research.google.com/github/phlippe/uvadlc_notebooks/blob/master/docs/tutorial_notebooks/JAX/tutorial9/AE_CIFAR10.ipynb#scrollTo=QFr6cv6lafOt
 class AEncoder(nn.Module):
@@ -72,8 +74,10 @@ class AutoEncoder(nn.Module):
     
 
     
+#############
+# VAE Model #
+#############
 
-# VAE Model
 class VAEncoder(nn.Module):
     latent_dim: int
 
@@ -99,7 +103,7 @@ class VADecoder(nn.Module):
         self.fc = nn.Dense(7 * 7 * 64)  # Reshape target size for upsampling
         self.deconv1 = nn.ConvTranspose(features=64, kernel_size=(3, 3), strides=(2, 2))
         self.deconv2 = nn.ConvTranspose(features=32, kernel_size=(3, 3), strides=(2, 2))
-        self.final_layer = nn.Conv(features=1 if self.original_shape[-1] == 1 else 3, kernel_size=(3, 3), padding="SAME")
+        self.final_layer = nn.Conv(features= 1, kernel_size=(3, 3), padding="SAME") #change feature to 3 for color images
 
     def __call__(self, z):
         x = nn.relu(self.fc(z))
@@ -129,8 +133,32 @@ class VAE(nn.Module):
         return x_recon_logits, mu, logvar
 
 
+
+############
+# TRAINING #
+############
+
 class TrainState(train_state.TrainState):
-    pass
+    latent_dim : int
+    input_shape : Tuple[int]
+
+
+# Training state
+def create_train_state(
+    key             : random.PRNGKey, 
+    model           : VAE, 
+    tx              : optax.GradientTransformation # optimizer
+    ):
+    key, subkey = jax.random.split(key)
+    params = model.init(key, subkey, jnp.ones([1, *model.input_shape]))
+    ts = TrainState.create(
+        apply_fn=model.apply, 
+        params=params, 
+        tx=tx, 
+        latent_dim = model.latent_dim,
+        input_shape = model.input_shape)
+    return ts
+
 
 
 # Loss functions
@@ -160,7 +188,8 @@ def compute_vae_loss(
 
 @jax.jit
 def train_step(
-    state       : TrainState, 
+    key         : random.PRNGKey,
+    ts          : TrainState, 
     batch       : Dataset
     ):
 
@@ -170,32 +199,10 @@ def train_step(
         kl_loss = KL(mu, logvar)
         return recon_loss + kl_loss
     
-    grads = jax.grad(loss_fn)(state.params)
-    state = state.apply_gradients(grads=grads)
-    return state
+    grads = jax.grad(loss_fn)(ts.params)
+    ts = ts.apply_gradients(grads=grads)
+    return ts
 
-
-
-# Training state
-def create_train_state(
-    key             : random.PRNGKey, 
-    model           : VAE, 
-    learning_rate   : jnp.float_
-    ):
-    key, subkey = jax.random.split(key)
-    params = model.init(key, subkey, jnp.ones([1, *model.input_shape]))
-    tx = optax.sgd(learning_rate, momentum = 0.9)
-    return TrainState.create(apply_fn=model.apply, params=params, tx=tx)
-
-
-
-
-# Usage
-latent_dim = 10
-input_shape = (28, 28, 1)  # Adjust to (32, 32, 3) for CIFAR-10
-model = VAE(latent_dim=latent_dim, input_shape=input_shape)
-key = jax.random.PRNGKey(0)
-ts = create_train_state(key, model, learning_rate=1e-3)
 
 
 def train(
@@ -208,10 +215,10 @@ def train(
         # Training loop
     for iStep in range(nSteps):
         # Training
-        batch_indices = random.randint(key, nBatch, 0, len(ds))
         key, subkey = random.split(key)
+        batch_indices = random.randint(key, nBatch, 0, len(ds))
         batch = ds[batch_indices]
-        ts = train_step(ts, batch)   
+        ts = train_step(subkey, ts, batch)   
 
         if iStep%100==0:
             idx = random.randint(subkey, 1000, 0, len(ds))
@@ -219,3 +226,45 @@ def train(
             print(f"Batches: {iStep},\tReconstruction loss {recon_loss:.4f},\tKL loss: {kl_loss:.4f}")    
     return ts
 
+
+
+def get_decoder(ts: TrainState):
+    decoder = VADecoder(ts.latent_dim, ts.input_shape)
+    decoder_params = {'params':ts.params['params']['decoder']}
+    
+    def decoder_fn(z):
+        return decoder.apply(decoder_params, z[jnp.newaxis,:])
+
+    return decoder_fn
+
+def get_encoder(ts: TrainState):
+    encoder = VAEncoder(ts.latent_dim)
+    encoder_params = {'params':ts.params['params']['encoder']}
+
+    def encoder_fn(key : random.PRNGKey, x: jax.Array):
+        mu, logvar = encoder.apply(encoder_params, x[jnp.newaxis,:])
+        std = jnp.exp(0.5 * logvar)
+        eps = jax.random.normal(key, std.shape)
+        return mu + eps * std
+    
+    return encoder_fn
+
+
+def G_function(
+    ts                  : TrainState,
+    model               : nn.Module,        #classifier model
+    params,                                 #params of classifier model
+    label               : int,
+    beta                : jnp.float_
+):
+
+    decoder_fn = get_decoder(ts)
+    
+    def G(z):
+        lbl = jax.nn.one_hot(jnp.array(label), 10)
+        x = decoder_fn(z)
+        logits = model.apply(params, jax.nn.sigmoid(x))
+        loss = - jax.nn.log_softmax(logits) @ lbl
+        return beta*loss[0]
+    
+    return G, jax.grad(G)

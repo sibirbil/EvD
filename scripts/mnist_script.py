@@ -7,27 +7,29 @@ import os
 import flax.serialization
 from time import perf_counter
 
+
 TrainBatchSize = 256
-TrainSteps = 10_000
+TrainSteps = 5_000
 F_BatchSize = 32
-F_Steps = 32 
+F_Steps = 16 
 F_Temp = 100.
 F_eta = 1e-4        #step size in hypsF
-G_Steps = 5000
-G_Temp = 10000.
-G_l1reg = .01           # ell_1 regularizer constant
-G_tvreg = .02           # total_variation regularization constant
-G_eta = 1e-4        #step size in hypsG
-G_label = 1
+G_Steps = 1000
+G_Temp = 100000.
+G_l1reg = .00025           # ell_1 regularizer constant
+G_tvreg = .001           # total_variation regularization constant
+G_eta = 1e-5       #step size in hypsG
+G_label = 5
 
-key = random.PRNGKey(31)
+key = random.PRNGKey(41)
 MNIST = create_datasets.get_MNIST('train')
 MNIST_test = create_datasets.get_MNIST('test')
 
-model = nets.LeNet5()
+features = [512,128,32,10] 
+model = nets.MLP(features)
 
 # if already trained a model, then just load it 
-model_path = 'params/lenet_MNIST_B'+str(TrainBatchSize) + '_N' + str(TrainSteps) + '.pkl'
+model_path = 'params/mlp_' + ('-'.join(map(str, features))) + '_MNIST_B' +str(TrainBatchSize) + '_N' + str(TrainSteps) + '.pkl'
 
 start = perf_counter()
 if os.path.exists(model_path):
@@ -56,7 +58,7 @@ test_accuracy, test_loss = nets.eval_step(ts, MNIST_test[:])
 print(f"On the test set: Accuracy {test_accuracy:.2%} \t loss {test_loss:.4f}")
 
 
-traj_path = 'params/traj_params_lenet_MNIST_B' +str(F_BatchSize) + '_N' + \
+traj_path = 'params/traj_params_mlp_' + '-'.join(map(str, features)) + '_MNIST_B' +str(F_BatchSize) + '_N' + \
             str(F_Steps)+ '_T' + str(F_Temp) +'_eta' + str(F_eta) + '.pkl'
 
 # create F, and hypsF

@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 import jax.numpy as jnp
 import jax
-
+import numpy as np
 
 def plot_1D_trajectory_histogram(trajectory, bins=50):
     plt.figure(figsize=(8, 6))
@@ -104,11 +104,11 @@ def show_filters(F):
 
 from matplotlib.animation import FuncAnimation
 
-def animate(images):
+def animate(images, save_filename = None):
 
     # Set up the figure and display the first frame
-    fig, ax = plt.subplots()
-    im = ax.imshow(images[0], cmap='gray')  # Show the first frame with a colormap
+    fig, ax = plt.subplots(figsize = (2,2) )
+    im = ax.imshow(images[0], cmap='gray', interpolation= "none")  # Show the first frame with a colormap
 
     # Function to update the image data for each frame
     def animate(frame):
@@ -116,5 +116,34 @@ def animate(images):
         return im,
 
     # Create the animation
-    ani = FuncAnimation(fig, animate, frames=images.shape[0], interval=200, blit=True)
+    ani = FuncAnimation(fig, animate, frames=images.shape[0], interval=1, blit=True)
+    if save_filename is not None:
+        ani.save(save_filename, writer = "pillow")
+    plt.show()
+
+
+def time_series(array1 : jax.Array, array2 = None, array3 = None, array4 = None):
+    array1_np = np.array(array1)
+    if array2 is not None:  
+        array2_np = np.array(array2)
+    if array3 is not None:
+        array3_np = np.array(array3)
+    if array4 is not None:
+        array4_np = np.array(array4)
+    time_indices = jnp.arange(len(array1_np))
+
+    # Plot the time series
+    plt.figure(figsize=(8, 4))
+    plt.plot(time_indices, array1_np, color = 'blue', label="Array 1")
+    if array2 is not None:
+        plt.plot(time_indices, array2_np, color ='red', label = "Array 2")
+    if array3 is not None:
+        plt.plot(time_indices, array3_np, color = 'orange', label="Array 3")
+    if array4 is not None:
+        plt.plot(time_indices, array4_np, color ='purple', label = "Array 4")
+    plt.xlabel("Time Steps")
+    plt.ylabel("Value")
+    plt.title("Time Series Graph")
+    plt.legend()
+    plt.grid(True)
     plt.show()

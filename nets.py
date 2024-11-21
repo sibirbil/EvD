@@ -82,7 +82,7 @@ def create_train_state(
         key             : jax.Array, 
         model           : nn.Module, 
         fake_batch      : jax.Array, 
-        learning_rate   : jnp.float_,
+        learning_rate   : optax.ScalarOrSchedule,
         optimizer       : str   = 'adam'
         ):
     if optimizer == 'adam':
@@ -150,8 +150,14 @@ def total_variation(image):
     """
     Total variation measure 
     """
-    dx, dy = jnp.array(jnp.gradient(image))
-    return jnp.sum(dx**2 + dy**2)
+    dx, dy = jnp.gradient(image)
+    return jnp.sum(jnp.abs(dx) + jnp.abs(dy))
+
+def laplacian(image):
+    dx, dy = jnp.gradient(image)
+    ddx, _ = jnp.gradient(dx)
+    _, ddy = jnp.gradient(dy)
+    return jnp.sum(jnp.abs(ddx + ddy))
 
 
 def F_function(
