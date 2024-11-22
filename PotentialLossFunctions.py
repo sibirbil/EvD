@@ -9,7 +9,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import LabelEncoder
-
+from statistics_data import( 
+    decode_categorical_features, compute_distances,
+    compute_feature_changes, decode_synthetic_instance,
+    compare_synthetic_instances, compare_categorical_changes
+    )
 
 """
 # Generate a synthetic dataset for a logistic regression 
@@ -27,12 +31,21 @@ df.occupation.replace(to_replace='?',value=np.nan,inplace=True)
 df['occupation'] = df['occupation'].fillna(method='bfill') 
 df['native-country'] = df['native-country'].replace("?", "United-States")
 
-# Update the income column to numerical values
-df['income'] = df['income'].apply(lambda x: 1 if x.strip() == '>50K' else 0)
-
 # Apply label encoding to the 'education' column
 label_encoder = LabelEncoder()
 df['education'] = label_encoder.fit_transform(df['education'])
+
+
+# separate numeric and categorical columns
+numeric_columns = df.select_dtypes(include=['float64', 'int64']).columns.difference(['income'])
+categorical_columns = df.select_dtypes(include=['object']).columns
+
+# initialize standardScaler and scale numeric columns
+# scaler = StandardScaler()
+# df[numeric_columns] = scaler.fit_transform(df[numeric_columns])
+
+# Update the income column to numerical values
+df['income'] = df['income'].apply(lambda x: 1 if x.strip() == '>50K' else 0)
 
 df['workclass'] = df['workclass'].replace({
     'Private': 'private',
@@ -57,14 +70,17 @@ categorical_columns = df.select_dtypes(include=['object']).columns
 df_encoded = pd.get_dummies(df, columns=categorical_columns, drop_first=True)
 
 
+# normalize some numerical columns
+df_encoded['fnlwgt'] = df_encoded['fnlwgt']/max(df_encoded['fnlwgt']) 
+df_encoded['capital-gain'] = df_encoded['capital-gain']/max(df_encoded['capital-gain'])
+df_encoded['capital-loss'] = df_encoded['capital-loss']/max(df_encoded['capital-loss'])
+  
 X = df_encoded.drop(columns=['income'])
 column_names = X.columns.tolist()
 
 X = X.to_numpy()
 X = X.astype(float)
 y = df_encoded['income'].to_numpy()
-
-
 
 #X = df.iloc[:,0:-1].to_numpy()
 #y = df["class"].to_numpy()
@@ -73,15 +89,15 @@ y = df_encoded['income'].to_numpy()
 #X = scaler.fit_transform(X)
 
 
-# Train a logistic regression model
-log_reg = LogisticRegression(max_iter = 10000)
+# train a logistic regression model
+log_reg = LogisticRegression(max_iter = 15000)
 log_reg.fit(X, y)
 
 # y values between 0 and 1
 y_prob = log_reg.predict_proba(X)[:,1] 
 
 
-# Retrieve the model's theta values with the intercept
+# retrieve the model's theta values with the intercept
 theta_values = list(log_reg.coef_[0]) + [log_reg.intercept_[0]]  # Add intercept to coefficients
 D = jnp.hstack([jnp.array(X), jnp.ones((X.shape[0], 1))])
 logits = D @ jnp.array(theta_values)
@@ -120,9 +136,9 @@ def F_function(
 
 # theta_0 = jnp.array([1.,1.,1.,1.,1.,1.])
 len_vec = X.shape[1]+1
-theta_0 = jnp.array(0.5*np.ones(len_vec))
-step_size_gd = 0.001  # Gradient descent step size
-num_gd_steps = 3000  # Number of steps
+theta_0 = jnp.array(0.05*np.ones(len_vec))
+step_size_gd = 0.0001  # Gradient descent step size
+num_gd_steps = 10000  # Number of steps
 
 
 # Gradient descent
@@ -152,10 +168,11 @@ theta_0 = jnp.array(np.array(theta_values)) #theta
 key = random.PRNGKey(42)
 key, subkey = random.split(key)
 
-state_theta = (theta_0, key)
+
+state_theta = (key, theta_0)   #(theta_0, key)
 hypsF = (F, gradF, 0.0001) #last entry is step size
 
-(last, last_key), traj_theta = langevin.MALA_chain(state_theta, hypsF, 100000)
+(last_key, last), traj_theta = langevin.MALA_chain(state_theta, hypsF, 100000)
 
 thetas = traj_theta[99000:]
 
@@ -173,7 +190,7 @@ def G_function(
             d = jnp.hstack([x, 1])
             logits = thetas @ d
             f_xtheta = 1 / (1 + jnp.exp(-logits))  
-            return jnp.mean(jnp.square(f_xtheta - y_val))*1000
+            return jnp.mean(jnp.square(f_xtheta - y_val))*100
         
         elif loss_type == 2:
             # Loss 2
@@ -193,8 +210,15 @@ def G_function(
     return G, jax.grad(G)
 
 
-#x_0 = jnp.array([0.5, 0.5, 0.5, 2., -1.])  # initial point
-x_0 = jnp.array(X[10]) #jnp.array(np.zeros(31))
+#x_0 = jnp.array([0.5, 0.5, 0.5, 2., -1.])  # initial point #jnp.array(np.zeros(31))
+x_0 = jnp.array(X[10])   #private, white, male, 1
+#x_0 = jnp.array(X[45])  #private, white, female, 1
+#x_0 = jnp.array(X[319]) #others, male, 1
+#x_0 = jnp.array(X[346]) #others, female, 1
+#x_0 = jnp.array(X[1])   #private, white, male, 0
+#x_0 = jnp.array(X[4])   #private, white, female, 0
+#x_0 = jnp.array(X[6])   #private, others, male, 0
+#x_0 = jnp.array(X[48])   #private, others, female, 0
 
 # Set the loss_type to select the loss function
 # Set to 1 for Loss function 1 (close to the boudnary 0.5)
@@ -210,81 +234,30 @@ elif loss_type == 2:
     # Parameters for Loss function 2
     # x_s = jnp.array([0.1, 0.3, -1.2, 0.4, 0.1])  # Specific point for Loss function 2
     x_s = jnp.array(X[21]) 
-    G, gradG = G_function(thetas, 1, x_s, lambda_=50, loss_type=2)
+    G, gradG = G_function(thetas, 1, x_s, lambda_=10, loss_type=2)
 
 else:
     raise ValueError("Invalid loss_type.")
 
-state_x = (x_0, subkey)
-hypsG = G, gradG, 0.00001
 
-_, traj_x = langevin.ULA_chain(state_x, hypsG, 10000)
+state_x = (subkey, x_0)
+hypsG = G, gradG, 0.0001
+
+_, traj_x = langevin.MALA_chain(state_x, hypsG, 10000)
 
 last_xs = traj_x[-100:]
 
+# check only one point
+sample_point = np.array(last_xs[-1:])
 
-def decode_synthetic_instance(x_i):
-    """
-    Decodes the encoded columns in a synthetic data instance x_i.
-
-    Args:
-        x_i (numpy.ndarray): A single synthetic data instance as a numpy array.
-
-    Returns:
-        tuple: Decoded values for workclass, race, and gender.
-    """
-    # Indices for encoded columns
-    workclass_indices = [7, 8, 9]  # workclass_government, workclass_others, workclass_private
-    race_index = 10  # race_white
-    gender_index = 11  # gender_Male
-
-    # Decode workclass using softmax
-    workclass_logits = x_i[0, workclass_indices]
-    workclass_probabilities = np.exp(workclass_logits) / np.sum(np.exp(workclass_logits))
-    workclass_categories = ['government', 'others', 'private']
-    workclass_decoded = workclass_categories[np.argmax(workclass_probabilities)]
-
-    # Decode race and gender
-    race_decoded = 'white' if x_i[0, race_index] > 0.5 else 'others'
-    gender_decoded = 'Male' if x_i[0, gender_index] > 0.5 else 'Female'
-
-    return workclass_decoded, race_decoded, gender_decoded
-
-decode_synthetic_instance(last_xs[-1:])
+# apply inverse transform
+# numeric_indices = [column_names.index(col) for col in numeric_columns]
+# sample_point[:, numeric_indices] = scaler.inverse_transform(sample_point[:, numeric_indices])
 
 
-def compare_synthetic_instances(columns, x_s, x_sample, x_0):
-    """
-    Compares two synthetic data instances and maps their values to columns.
+decoded_instance = decode_synthetic_instance(sample_point)
 
-    Args:
-        columns (list): List of column names corresponding to the features.
-        x_s (numpy.ndarray): First synthetic data instance as a numpy array.
-        x_sample (numpy.ndarray): Second synthetic data instance as a numpy array.
-
-    Returns:
-        pd.DataFrame: A DataFrame showing the comparison between the two instances.
-    """
-    if len(x_s) == 0:
-        x_s_flat = np.full(len(columns), np.nan)  # Fill with NaNs if x_s is empty
-    else:
-        x_s_flat = np.array(x_s).flatten()  # Ensure x_s is a numpy array and flattened
-    
-    
-    # Flatten arrays to ensure they are 1D
-    x_sample_flat = x_sample.flatten()
-    x_0_flat = x_0.flatten()
-    
-    # Create a comparison DataFrame
-    comparison = pd.DataFrame({
-        'Column': columns,
-        'x_s': x_s_flat,
-        'x_sample': x_sample_flat,
-        'x_initial': x_0_flat
-    })
-    return comparison
-
-x_sample = last_xs[-1:,]
+x_sample = sample_point
 
 if loss_type == 1:
     comparison_df = compare_synthetic_instances(column_names, [], x_sample, x_0)
@@ -292,9 +265,42 @@ else:
     comparison_df = compare_synthetic_instances(column_names, x_s, x_sample, x_0)
 
 
+# Decoding categorical features from the last 100 points
+decoded_categorical = decode_categorical_features(last_xs, decode_synthetic_instance)
+
+# Print summary of decoded categorical features
+categorical_summary = decoded_categorical.apply(pd.Series.value_counts).fillna(0)
+print("Categorical Decoding Summary:")
+print(categorical_summary)
+
 
 # Check predictions
 y_prob_check = log_reg.predict_proba(last_xs)[:, 1] 
+predicted_y = (y_prob_check > 0.5).astype(int)
+
+# Add predicted
+decoded_categorical["predicted_y"] = predicted_y
+
+# Compare categorical changes
+categorical_flip = compare_categorical_changes(last_xs, x_0, decode_synthetic_instance)
+
+print("Categorical Changes Summary:")
+print(categorical_flip)
+
+
+# Compute Euclidean distances between each point in last_xs and x_0
+distances = compute_distances(last_xs, x_0)
+
+# Print the statistics
+print("Distance from Initial Point (x_0):")
+for stat, value in distances.items():
+    print(f"{stat}: {value:.4f}")
+    
+feature_changes = compute_feature_changes(last_xs, x_0, column_names)
+
+# Print the statistics
+print("Feature Changes Statistics:")
+print(feature_changes)
 
 # Plot distribution
 plt.figure(figsize=(10, 6))
