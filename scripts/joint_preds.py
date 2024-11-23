@@ -5,6 +5,8 @@ import pickle
 import flax
 
 import vae, nets, create_datasets
+import train_utils
+
 
 MNIST = create_datasets.get_MNIST('train')
 
@@ -80,7 +82,7 @@ def G(z):
 
 gradG = jax.grad(G)
 
-hypsG= G, gradG, 5e-4
+hypsG= G, gradG, train_utils.sqrt_decay(1e-3)
 z0 = encoder(key, MNISTimgs[1000])
 state_z = key, z0
 
@@ -94,8 +96,8 @@ traj_x = jax.vmap(decoder)(traj_z)
 traj_x = jnp.vstack([jnp.repeat(x0, 100, axis = 0), traj_x, jnp.repeat(last_x, 100, axis = 0)])
 traj_x = jax.nn.sigmoid(traj_x)
 
-## Tried to do it directly with pixels but it didn't work 
-## so it is commented out
+# Tried to do it directly with pixels but it didn't work 
+# so it is commented out
 
 # def PixelG(x):
 #     tot_var = nets.total_variation(x.squeeze())
@@ -105,11 +107,12 @@ traj_x = jax.nn.sigmoid(traj_x)
 #     mlp_logits = mlp.apply(mlp_params, x)
 #     lenet_logits = lenet.apply(lenet_params, x)
 #     loss = - (jax.nn.log_softmax(mlp_logits) + jax.nn.log_softmax(lenet_logits))[0, label]
-#     return beta*(loss + abs(l1-100) + tot_var + laplacian)
+#     return beta*(10*loss + 0*abs(l1-100) + 0*tot_var + 0*laplacian)
+
 
 
 # gradPixelG = jax.grad(PixelG)
-# hypsPixelG = PixelG, gradPixelG, 1e-4
+# hypsPixelG = PixelG, gradPixelG, train_utils.power_decay(0.1, alpha = 0.75, offset =1 , rate = 10), 0., 1.
 # x0 =  MNISTimgs[1000]
 # state_x = key, x0
 

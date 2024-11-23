@@ -124,7 +124,7 @@ class VAE(nn.Module):
     def reparameterize(self, key, mu, logvar):
         std = jnp.exp(0.5 * logvar)
         eps = jax.random.normal(key, std.shape)
-        return mu + eps * std
+        return mu + eps * std  # latent variable z
 
     def __call__(self, key, x):
         mu, logvar = self.encoder(x)
