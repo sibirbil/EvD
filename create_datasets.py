@@ -68,18 +68,23 @@ samples2 = create_mixture_of_gaussians(num_samples, means2, sqrt_covs, weights, 
 from datasets import load_dataset, Features, Array2D, Array3D
 
 
-def preprocess(example):
-    example["image"] = example['image']/255.0  # Convert the image to a jnp array
-    example["label"] = jax.nn.one_hot(example['label'], 10)
+def standardize_image_pixels(example):
+    example["image"] = example['image']/255.0  
     return example
+
+def one_hotify(example):
+    example["label"] = jax.nn.one_hot(example['label'], 10)
 
 
 def get_MNIST(
-    split   : str, #'test' or 'train'
+    split       : str,          # 'test' or 'train'
+    one_hot     : bool = False  # labels as indices or one hot encoded
 ):
     MNIST = load_dataset("mnist", split = split)
     MNIST.set_format('numpy')
-    MNIST = MNIST.map(preprocess)
+    MNIST = MNIST.map(standardize_image_pixels)
+    if one_hot:
+        MNIST = MNIST.map(one_hotify)
 
     features = Features({**MNIST.features, 'image':Array2D(dtype = 'float32', shape = (28,28) )})
     nothing= lambda x : x
@@ -89,13 +94,16 @@ def get_MNIST(
     return MNIST
 
 def get_CIFAR(
-    split   : str, #'test' or 'train'
+    split   : str,          #'test' or 'train'
+    one_hot : bool = False  # labels as indices or one hot encoded
 ):
     CIFAR = load_dataset("cifar10", split=split)
     CIFAR = CIFAR.rename_column("img", "image")
 
     CIFAR.set_format("numpy")
-    CIFAR = CIFAR.map(preprocess)
+    CIFAR = CIFAR.map(standardize_image_pixels)
+    if one_hot:
+        CIFAR = CIFAR.map(one_hotify)
     
     features = Features({**CIFAR.features, 'image':Array3D(dtype = 'float32', shape=(32,32,3))})
     nothing = lambda x : x

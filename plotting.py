@@ -85,11 +85,13 @@ def plot_lines_and_dots(
     plt.show()
 
 
-def show_mnist_example(image):
+def image_show(image, save_filename = None):
     # Display the image and label
     plt.figure(figsize=(2, 2))
     plt.imshow(image, cmap='gray')
     plt.axis('off')  # Hide the axes
+    if save_filename is not None:
+        plt.savefig(save_filename, bbox_inches = 'tight')
     plt.show()
 
 import matplotlib.colors as mcolors
@@ -104,10 +106,12 @@ def show_filters(F):
 
 from matplotlib.animation import FuncAnimation
 
-def animate(images, save_filename = None):
+def animate(images, save_filename = None, interval = 1, skip_over = 1):
 
     # Set up the figure and display the first frame
+    images = images[::skip_over]
     fig, ax = plt.subplots(figsize = (2,2) )
+    fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=None, hspace=None)
     im = ax.imshow(images[0], cmap='gray', interpolation= "none")  # Show the first frame with a colormap
 
     # Function to update the image data for each frame
@@ -116,7 +120,7 @@ def animate(images, save_filename = None):
         return im,
 
     # Create the animation
-    ani = FuncAnimation(fig, animate, frames=images.shape[0], interval=1, blit=True)
+    ani = FuncAnimation(fig, animate, frames=images.shape[0], interval=interval, blit=True)
     if save_filename is not None:
         ani.save(save_filename, writer = "pillow")
     plt.show()

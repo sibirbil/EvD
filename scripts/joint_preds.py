@@ -56,7 +56,7 @@ mlp = nets.MLP(features)
 lenet = nets.LeNet5()
 lenet_param_path = "params/lenet_MNIST_B256_N10000.pkl"
 with open(lenet_param_path, 'rb') as f:
-    lenet_params = lenet.init(key, MNIST[:2]['image'])
+    lenet_params = lenet.init(key, MNISTimgs[:2])
     lenet_params = flax.serialization.from_bytes(lenet_params, pickle.load(f))
 
 # MLP classifier
@@ -68,8 +68,9 @@ with open(mlp_param_path, 'rb') as f:
     mlp_params = flax.serialization.from_bytes(mlp_params, pickle.load(f))
 
 
-label = 7
-beta = 1.
+label = 8
+beta = 10.
+init_lr = 1e-4
 import langevin
 
 
@@ -82,13 +83,13 @@ def G(z):
 
 gradG = jax.grad(G)
 
-hypsG= G, gradG, train_utils.sqrt_decay(1e-3)
-z0 = encoder(key, MNISTimgs[1000])
+hypsG= G, gradG, train_utils.sqrt_decay(init_lr)
+z0 = encoder(key, MNISTimgs[1234])
 state_z = key, z0
 
 
 
-(last_key, last_z), traj_z = langevin.MALA_chain(state_z, hypsG, 5000)
+(last_key, last_z), traj_z = langevin.MALA_chain(state_z, hypsG, 10000)
 
 x0 = decoder(z0)[jnp.newaxis,:]
 last_x = decoder(last_z)[jnp.newaxis,:]
