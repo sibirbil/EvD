@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import LabelEncoder
+from adult_dataset import prepare_adult_dataset
 from statistics_data import( 
     decode_categorical_features, compute_distances,
     compute_feature_changes, decode_synthetic_instance,
@@ -20,67 +21,31 @@ from statistics_data import(
 X, y = make_classification(n_samples=500, n_features=5, n_informative=3, n_redundant=1, 
                            n_classes=2, random_state=42)
 
+
+
+file_path = "./adult.csv"
+# Load and prepare the dataset
+X, y, column_names = prepare_adult_dataset(file_path)
 """
 
-file = "./adult.csv"
-df = pd.read_csv(file)
+file_path = "./GiveMeSomeCredit.csv"
+df = pd.read_csv(file_path)
 
-# some preparation steps
-df.workclass = df.workclass.replace("?", "Private")
-df.occupation.replace(to_replace='?',value=np.nan,inplace=True)
-df['occupation'] = df['occupation'].fillna(method='bfill') 
-df['native-country'] = df['native-country'].replace("?", "United-States")
+# remove missing values
+df = df.dropna()
 
-# Apply label encoding to the 'education' column
-label_encoder = LabelEncoder()
-df['education'] = label_encoder.fit_transform(df['education'])
-
-
-# separate numeric and categorical columns
-numeric_columns = df.select_dtypes(include=['float64', 'int64']).columns.difference(['income'])
-categorical_columns = df.select_dtypes(include=['object']).columns
+y = df['SeriousDlqin2yrs']
+X = df.drop(columns=['SeriousDlqin2yrs'])
+allnumeric = 1 # the dataset is all numeric, no need to have decoding
+column_names = X.columns
 
 # initialize standardScaler and scale numeric columns
 # scaler = StandardScaler()
 # df[numeric_columns] = scaler.fit_transform(df[numeric_columns])
 
-# Update the income column to numerical values
-df['income'] = df['income'].apply(lambda x: 1 if x.strip() == '>50K' else 0)
 
-df['workclass'] = df['workclass'].replace({
-    'Private': 'private',
-    'Local-gov': 'government',
-    'Federal-gov': 'government',
-    'State-gov': 'government',
-    'Self-emp-not-inc': 'others',
-    'Self-emp-inc': 'others',
-    'Without-pay': 'others',
-    'Never-worked': 'Never-worked'
-})
-
-# remove the categorical variables
-columns_to_remove = ['marital-status', 'occupation', 'relationship', 'native-country']
-df.drop(columns=columns_to_remove, inplace=True)
-
-# Group the 'race' column into 'white' and 'others'
-df['race'] = df['race'].apply(lambda x: 'white' if x.lower() == 'white' else 'others')
-
-# Apply one-hot encoding to the remaining categorical columns
-categorical_columns = df.select_dtypes(include=['object']).columns
-df_encoded = pd.get_dummies(df, columns=categorical_columns, drop_first=True)
-
-
-# normalize some numerical columns
-df_encoded['fnlwgt'] = df_encoded['fnlwgt']/max(df_encoded['fnlwgt']) 
-df_encoded['capital-gain'] = df_encoded['capital-gain']/max(df_encoded['capital-gain'])
-df_encoded['capital-loss'] = df_encoded['capital-loss']/max(df_encoded['capital-loss'])
-  
-X = df_encoded.drop(columns=['income'])
-column_names = X.columns.tolist()
-
-X = X.to_numpy()
-X = X.astype(float)
-y = df_encoded['income'].to_numpy()
+X = X.to_numpy().astype(float)
+y = y.to_numpy()
 
 #X = df.iloc[:,0:-1].to_numpy()
 #y = df["class"].to_numpy()
@@ -255,7 +220,8 @@ sample_point = np.array(last_xs[-1:])
 # sample_point[:, numeric_indices] = scaler.inverse_transform(sample_point[:, numeric_indices])
 
 
-decoded_instance = decode_synthetic_instance(sample_point)
+if allnumeric == 0:
+    decoded_instance = decode_synthetic_instance(sample_point)
 
 x_sample = sample_point
 
@@ -265,27 +231,29 @@ else:
     comparison_df = compare_synthetic_instances(column_names, x_s, x_sample, x_0)
 
 
-# Decoding categorical features from the last 100 points
-decoded_categorical = decode_categorical_features(last_xs, decode_synthetic_instance)
+if allnumeric == 0:
+    # Decoding categorical features from the last 100 points
+    decoded_categorical = decode_categorical_features(last_xs, decode_synthetic_instance)
 
-# Print summary of decoded categorical features
-categorical_summary = decoded_categorical.apply(pd.Series.value_counts).fillna(0)
-print("Categorical Decoding Summary:")
-print(categorical_summary)
+    # Print summary of decoded categorical features
+    categorical_summary = decoded_categorical.apply(pd.Series.value_counts).fillna(0)
+    print("Categorical Decoding Summary:")
+    print(categorical_summary)
 
 
 # Check predictions
 y_prob_check = log_reg.predict_proba(last_xs)[:, 1] 
 predicted_y = (y_prob_check > 0.5).astype(int)
 
-# Add predicted
-decoded_categorical["predicted_y"] = predicted_y
+if allnumeric ==0:
+    # Add predicted
+    decoded_categorical["predicted_y"] = predicted_y
 
-# Compare categorical changes
-categorical_flip = compare_categorical_changes(last_xs, x_0, decode_synthetic_instance)
+    # Compare categorical changes
+    categorical_flip = compare_categorical_changes(last_xs, x_0, decode_synthetic_instance)
 
-print("Categorical Changes Summary:")
-print(categorical_flip)
+    print("Categorical Changes Summary:")
+    print(categorical_flip)
 
 
 # Compute Euclidean distances between each point in last_xs and x_0
