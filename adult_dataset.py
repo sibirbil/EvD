@@ -13,12 +13,15 @@ from sklearn.preprocessing import LabelEncoder
 def prepare_adult_dataset(file_path):
     # Load the dataset
     df = pd.read_csv(file_path)
+    
+    df.drop_duplicates(inplace=True)
 
     # Data cleaning and preparation
-    df.workclass = df.workclass.replace("?", "Private")
-    df.occupation.replace(to_replace='?', value=np.nan, inplace=True)
-    df['occupation'] = df['occupation'].fillna(method='bfill') 
-    df['native-country'] = df['native-country'].replace("?", "United-States")
+    df[df == '?'] = np.nan
+
+    for col in ['workclass', 'occupation', 'native-country']:
+        df[col].fillna(df[col].mode()[0], inplace=True)
+
 
     # Apply label encoding to the 'education' column
     label_encoder = LabelEncoder()
@@ -39,14 +42,16 @@ def prepare_adult_dataset(file_path):
         'State-gov': 'government',
         'Self-emp-not-inc': 'others',
         'Self-emp-inc': 'others',
-        'Without-pay': 'others',
+        'Without-pay': 'Never-worked',
         'Never-worked': 'Never-worked'
     })
 
     df_encoded = pd.get_dummies(df, columns=['workclass', 'race', 'gender'], drop_first=True)
-    df_encoded['fnlwgt'] = df_encoded['fnlwgt'] / max(df_encoded['fnlwgt']) 
-    df_encoded['capital-gain'] = df_encoded['capital-gain'] / max(df_encoded['capital-gain'])
-    df_encoded['capital-loss'] = df_encoded['capital-loss'] / max(df_encoded['capital-loss'])
+   
+    # scale the large values
+    #df_encoded['fnlwgt'] = df_encoded['fnlwgt'] / max(df_encoded['fnlwgt']) 
+    #df_encoded['capital-gain'] = df_encoded['capital-gain'] / max(df_encoded['capital-gain'])
+    #df_encoded['capital-loss'] = df_encoded['capital-loss'] / max(df_encoded['capital-loss'])
 
     # Separate features and labels
     X = df_encoded.drop(columns=['income'])

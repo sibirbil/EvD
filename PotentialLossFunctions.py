@@ -10,6 +10,9 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import LabelEncoder
 from adult_dataset import prepare_adult_dataset
+from GiveMeSomeCredit_dataset import prepare_credit_dataset
+import FICO_dataset
+from sklearn.metrics import confusion_matrix
 from statistics_data import( 
     decode_categorical_features, compute_distances,
     compute_feature_changes, decode_synthetic_instance,
@@ -23,21 +26,49 @@ X, y = make_classification(n_samples=500, n_features=5, n_informative=3, n_redun
 
 
 
+
+#### GIVE ME SOME CREDIT DATASET
+
+file_path = "./GiveMeSomeCredit.csv"
+X, y = prepare_credit_dataset(file_path)
+column_names = X.columns
+allnumeric = 1
+
+#####
+
+
+##### ADULT DATASET
+
+allnumeric = 0  # the dataset is all numeric, no need to have decoding
+
 file_path = "./adult.csv"
 # Load and prepare the dataset
 X, y, column_names = prepare_adult_dataset(file_path)
+
+##########
+
+
+###### FICO DATASET
+allnumeric = 1
+X = FICO_dataset.X
+y = FICO_dataset.y
+column_names = X.columns
+
+#################
+
 """
 
-file_path = "./GiveMeSomeCredit.csv"
-df = pd.read_csv(file_path)
+######################
+# Istedigin datasetini yukaridan kopyalayip asagida deneyebilirsin
+######################
 
-# remove missing values
-df = df.dropna()
-
-y = df['SeriousDlqin2yrs']
-X = df.drop(columns=['SeriousDlqin2yrs'])
-allnumeric = 1 # the dataset is all numeric, no need to have decoding
+###### FICO DATASET
+allnumeric = 1
+X = FICO_dataset.X
+y = FICO_dataset.y
+df = FICO_dataset.df
 column_names = X.columns
+#################
 
 # initialize standardScaler and scale numeric columns
 # scaler = StandardScaler()
@@ -72,7 +103,8 @@ y_pred_test = np.zeros(len(y))
 for i in range(len(y)):
     if y_prob_test[i] > 0.5:
         y_pred_test[i] = 1
-        
+
+confusion_matrix(y, y_pred_test) 
 
 X = jnp.array(X)
 y = jnp.array(y)
@@ -139,7 +171,8 @@ hypsF = (F, gradF, 0.0001) #last entry is step size
 
 (last_key, last), traj_theta = langevin.MALA_chain(state_theta, hypsF, 100000)
 
-thetas = traj_theta[99000:]
+thetas = traj_theta[99900:]
+thetas = theta_0
 
 def G_function(
         thetas      :jax.Array,
@@ -176,7 +209,9 @@ def G_function(
 
 
 #x_0 = jnp.array([0.5, 0.5, 0.5, 2., -1.])  # initial point #jnp.array(np.zeros(31))
-x_0 = jnp.array(X[10])   #private, white, male, 1
+
+# These points are picked for the Adult dataset
+#x_0 = jnp.array(X[10])   #private, white, male, 1
 #x_0 = jnp.array(X[45])  #private, white, female, 1
 #x_0 = jnp.array(X[319]) #others, male, 1
 #x_0 = jnp.array(X[346]) #others, female, 1
@@ -185,10 +220,15 @@ x_0 = jnp.array(X[10])   #private, white, male, 1
 #x_0 = jnp.array(X[6])   #private, others, male, 0
 #x_0 = jnp.array(X[48])   #private, others, female, 0
 
+# These points are picked for the FICO dataset
+#x_0 = jnp.array(X[1])  # y_prob = 0.93, this point is for loss type 1
+x_0 = jnp.array(X[7])  # y_prob = 0.34 this point is for loss type 2
+
+
 # Set the loss_type to select the loss function
 # Set to 1 for Loss function 1 (close to the boudnary 0.5)
 # or 2 for Loss function 2 (counterfactual)
-loss_type = 1  
+loss_type = 2  
 
 if loss_type == 1:
     # Parameters for Loss function 1
@@ -198,15 +238,16 @@ if loss_type == 1:
 elif loss_type == 2:
     # Parameters for Loss function 2
     # x_s = jnp.array([0.1, 0.3, -1.2, 0.4, 0.1])  # Specific point for Loss function 2
-    x_s = jnp.array(X[21]) 
-    G, gradG = G_function(thetas, 1, x_s, lambda_=10, loss_type=2)
+    # x_s = jnp.array(X[21])   # for Adult dataset
+    x_s = jnp.array(X[10])   # for FICO dataset, y_prob = 0.27 
+    G, gradG = G_function(thetas, 1, x_s, lambda_=20, loss_type=2)
 
 else:
     raise ValueError("Invalid loss_type.")
 
 
 state_x = (subkey, x_0)
-hypsG = G, gradG, 0.0001
+hypsG = G, gradG, 0.001
 
 _, traj_x = langevin.MALA_chain(state_x, hypsG, 10000)
 
