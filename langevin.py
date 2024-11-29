@@ -107,7 +107,7 @@ def MALA_step(
     return key, x_next
 
 
-from train_utils import as_scheduler
+from utils import as_scheduler
 
 def MALA_chain(state, hyps, NSteps):
     func, grad_func, eta, *clip_to = (*hyps, None, None)[:5]

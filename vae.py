@@ -6,6 +6,7 @@ from flax.training import train_state
 import optax
 from typing import Tuple
 from datasets import Dataset
+from nets import MLP
 
 ###############################
 # NON-VARIATIONAL AutoEncoder #
@@ -121,18 +122,51 @@ class VAE(nn.Module):
         self.encoder = VAEncoder(self.latent_dim)
         self.decoder = VADecoder(self.latent_dim, self.input_shape)
 
-    def reparameterize(self, key, mu, logvar):
+    def reparametrize(self, key, mu, logvar):
         std = jnp.exp(0.5 * logvar)
         eps = jax.random.normal(key, std.shape)
         return mu + eps * std  # latent variable z
 
     def __call__(self, key, x):
         mu, logvar = self.encoder(x)
-        z = self.reparameterize(key, mu, logvar)
+        z = self.reparametrize(key, mu, logvar)
         x_recon_logits = self.decoder(z)
         return x_recon_logits, mu, logvar
 
 
+
+########################
+##  TABULAR DATA VAE  ##
+########################
+
+from nets import MLP
+from math import log2
+
+class TabularVAE(nn.Module):
+    latent_dim      : int
+    input_dim       : int
+
+    def setup(self):
+        num_hl = int(log2(self.input_dim/self.latent_dim)) + 2 #number of hidden layers
+
+        # start at 2 to 4 times the input dimension, half at each layer,
+        # we repeat 2*latent_dim twice since the last one corresponds to two heads 
+        # in the latent space, one for the mean, other for log-variance.
+        features = [self.latent_dim*2**n for n in range(num_hl, 0, -1)] + [2*self.latent_dim]
+        
+        self.encoder = MLP(features)        # the mu and logvar are stacked, need to be reshaped
+        self.decoder = MLP(features[-2::-1] + [self.input_dim])
+
+    def reparametrize(self, key, mu, logvar):
+        std = jnp.exp(0.5 * logvar)
+        eps = jax.random.normal(key, std.shape)
+        return mu + eps * std
+    
+    def __call__(self, key, x):
+        mu, logvar = self.encoder(x).reshape(2,-1)  # two heads were stacked
+        z = self.reparametrize(key, mu, logvar)
+        x_recon_logits = self.decoder(z)
+        return x_recon_logits, mu, logvar
 
 ############
 # TRAINING #

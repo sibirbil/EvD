@@ -29,7 +29,7 @@ X, y = make_classification(n_samples=500, n_features=5, n_informative=3, n_redun
 
 #### GIVE ME SOME CREDIT DATASET
 
-file_path = "./GiveMeSomeCredit.csv"
+file_path = ".data/GiveMeSomeCredit.csv"
 X, y = prepare_credit_dataset(file_path)
 column_names = X.columns
 allnumeric = 1
@@ -41,7 +41,7 @@ allnumeric = 1
 
 allnumeric = 0  # the dataset is all numeric, no need to have decoding
 
-file_path = "./adult.csv"
+file_path = ".data/adult.csv"
 # Load and prepare the dataset
 X, y, column_names = prepare_adult_dataset(file_path)
 

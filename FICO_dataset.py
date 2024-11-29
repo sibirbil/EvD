@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 from sklearn.impute import SimpleImputer
 
-file_path = "./FICO_dataset.csv"
+file_path = ".data/FICO_dataset.csv"
 df = pd.read_csv(file_path)
 
 X = df.drop(columns = 'RiskPerformance')
