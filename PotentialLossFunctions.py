@@ -13,6 +13,7 @@ from statistics_data import(
     compute_feature_changes, decode_synthetic_instance,
     compare_synthetic_instances, compare_categorical_changes
     )
+from sklearn.model_selection import train_test_split
 #from sklearn.preprocessing import StandardScaler
 
 
@@ -66,8 +67,12 @@ column_names = X.columns
 allnumeric = 0  # the dataset is all numeric, no need to have decoding
 
 df, encoded_cols = create_datasets.get_adult()
-X = df.drop(columns=['income'])
-y = df['income']
+# Split the dataset
+train_df, test_df = train_test_split(df, test_size=0.2, random_state=10)
+
+
+X = train_df.drop(columns=['income'])
+y = train_df['income']
 column_names = X.columns
 
 ##########
@@ -94,19 +99,36 @@ log_reg.fit(X, y)
 # y values between 0 and 1
 y_prob = log_reg.predict_proba(X)[:,1] 
 
-
+# Training data
 # retrieve the model's theta values with the intercept
 theta_values = list(log_reg.coef_[0]) + [log_reg.intercept_[0]]  # Add intercept to coefficients
 D = jnp.hstack([jnp.array(X), jnp.ones((X.shape[0], 1))])
 logits = D @ jnp.array(theta_values)
-y_prob_test= 1/(1 + jnp.exp(-logits))  
+y_prob_train = 1/(1 + jnp.exp(-logits))  
 
-y_pred_test = np.zeros(len(y))
+y_pred_train = np.zeros(len(y))
 for i in range(len(y)):
-    if y_prob_test[i] > 0.5:
-        y_pred_test[i] = 1
+    if y_prob_train[i] > 0.5:
+        y_pred_train[i] = 1
 
-confusion_matrix(y, y_pred_test) 
+confusion_matrix(y, y_pred_train) 
+
+# Test Data
+X_test = test_df.drop(columns=['income'])
+y_test = test_df['income']
+
+X_test = X_test.to_numpy().astype(float)
+y_test = y_test.to_numpy()
+
+# Predict on the test set
+y_pred_test = log_reg.predict(X_test)
+
+# Compute the confusion matrix
+result_test = confusion_matrix(y_test, y_pred_test)
+
+
+
+
 
 X = jnp.array(X)
 y = jnp.array(y)
