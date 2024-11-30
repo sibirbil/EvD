@@ -3,23 +3,21 @@ import jax
 import jax.numpy as jnp
 import langevin
 import jax.random as random
-from sklearn.datasets import make_classification
 from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import LabelEncoder
-from adult_dataset import prepare_adult_dataset
-from GiveMeSomeCredit_dataset import prepare_credit_dataset
-import FICO_dataset
+import create_datasets
 from sklearn.metrics import confusion_matrix
 from statistics_data import( 
     decode_categorical_features, compute_distances,
     compute_feature_changes, decode_synthetic_instance,
     compare_synthetic_instances, compare_categorical_changes
     )
+#from sklearn.preprocessing import StandardScaler
+
 
 """
+from sklearn.datasets import make_classification
 # Generate a synthetic dataset for a logistic regression 
 X, y = make_classification(n_samples=500, n_features=5, n_informative=3, n_redundant=1, 
                            n_classes=2, random_state=42)
@@ -41,9 +39,10 @@ allnumeric = 1
 
 allnumeric = 0  # the dataset is all numeric, no need to have decoding
 
-file_path = ".data/adult.csv"
-# Load and prepare the dataset
-X, y, column_names = prepare_adult_dataset(file_path)
+df = create_datasets.get_adult()
+X = df.drop(columns=['income'])
+y = df['income']
+column_names = X.columns
 
 ##########
 
@@ -62,13 +61,16 @@ column_names = X.columns
 # Istedigin datasetini yukaridan kopyalayip asagida deneyebilirsin
 ######################
 
-###### FICO DATASET
-allnumeric = 1
-X = FICO_dataset.X
-y = FICO_dataset.y
-df = FICO_dataset.df
+##### ADULT DATASET
+
+allnumeric = 0  # the dataset is all numeric, no need to have decoding
+
+df, encoded_cols = create_datasets.get_adult()
+X = df.drop(columns=['income'])
+y = df['income']
 column_names = X.columns
-#################
+
+##########
 
 # initialize standardScaler and scale numeric columns
 # scaler = StandardScaler()
@@ -124,7 +126,8 @@ def F_function(
     
     def F(theta):
         logits = D @ theta
-        term1 = jnp.log(1 + jnp.exp(logits))  # log(1 + exp(x_i^T theta))
+        #term1 = jnp.log(1 + jnp.exp(logits))  # log(1 + exp(x_i^T theta))
+        term1 = -jax.nn.log_sigmoid(-logits)
         term2 = y * logits 
         return jnp.mean(term1 - term2)
 
@@ -172,7 +175,7 @@ hypsF = (F, gradF, 0.0001) #last entry is step size
 (last_key, last), traj_theta = langevin.MALA_chain(state_theta, hypsF, 100000)
 
 thetas = traj_theta[99900:]
-thetas = theta_0
+#thetas = theta_0
 
 def G_function(
         thetas      :jax.Array,
@@ -196,7 +199,8 @@ def G_function(
             
             d = jnp.hstack([x, 1])
             logits = thetas @ d
-            term1 = jnp.log(1 + jnp.exp(logits))  # log(1 + exp(x_i^T theta))
+            #term1 = jnp.log(1 + jnp.exp(logits))  # log(1 + exp(x_i^T theta))
+            term1 = -jax.nn.log_sigmoid(-logits)
             term2 = y_val * logits 
             difference = jnp.mean(term1 - term2)
             
@@ -215,14 +219,14 @@ def G_function(
 #x_0 = jnp.array(X[45])  #private, white, female, 1
 #x_0 = jnp.array(X[319]) #others, male, 1
 #x_0 = jnp.array(X[346]) #others, female, 1
-#x_0 = jnp.array(X[1])   #private, white, male, 0
+x_0 = jnp.array(X[1])   #private, white, male, 0
 #x_0 = jnp.array(X[4])   #private, white, female, 0
 #x_0 = jnp.array(X[6])   #private, others, male, 0
 #x_0 = jnp.array(X[48])   #private, others, female, 0
 
 # These points are picked for the FICO dataset
 #x_0 = jnp.array(X[1])  # y_prob = 0.93, this point is for loss type 1
-x_0 = jnp.array(X[7])  # y_prob = 0.34 this point is for loss type 2
+#x_0 = jnp.array(X[7])  # y_prob = 0.34 this point is for loss type 2
 
 
 # Set the loss_type to select the loss function
@@ -238,9 +242,9 @@ if loss_type == 1:
 elif loss_type == 2:
     # Parameters for Loss function 2
     # x_s = jnp.array([0.1, 0.3, -1.2, 0.4, 0.1])  # Specific point for Loss function 2
-    # x_s = jnp.array(X[21])   # for Adult dataset
-    x_s = jnp.array(X[10])   # for FICO dataset, y_prob = 0.27 
-    G, gradG = G_function(thetas, 1, x_s, lambda_=20, loss_type=2)
+    x_s = jnp.array(X[21])   # for Adult dataset (black, private, female)
+    #x_s = jnp.array(X[10])   # for FICO dataset, y_prob = 0.27 
+    G, gradG = G_function(thetas, 1, x_s, lambda_=50, loss_type=2)
 
 else:
     raise ValueError("Invalid loss_type.")
@@ -262,7 +266,7 @@ sample_point = np.array(last_xs[-1:])
 
 
 if allnumeric == 0:
-    decoded_instance = decode_synthetic_instance(sample_point)
+    decoded_instance = decode_synthetic_instance(sample_point, encoded_cols)
 
 x_sample = sample_point
 
@@ -274,7 +278,7 @@ else:
 
 if allnumeric == 0:
     # Decoding categorical features from the last 100 points
-    decoded_categorical = decode_categorical_features(last_xs, decode_synthetic_instance)
+    decoded_categorical = decode_categorical_features(last_xs, decode_synthetic_instance, encoded_cols)
 
     # Print summary of decoded categorical features
     categorical_summary = decoded_categorical.apply(pd.Series.value_counts).fillna(0)
@@ -291,7 +295,7 @@ if allnumeric ==0:
     decoded_categorical["predicted_y"] = predicted_y
 
     # Compare categorical changes
-    categorical_flip = compare_categorical_changes(last_xs, x_0, decode_synthetic_instance)
+    categorical_flip = compare_categorical_changes(last_xs, x_0, decode_synthetic_instance, encoded_cols)
 
     print("Categorical Changes Summary:")
     print(categorical_flip)

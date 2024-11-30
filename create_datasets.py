@@ -245,11 +245,26 @@ def get_adult():
     gen = preprocessor.named_transformers_['gen'].get_feature_names_out(input_features = ['gender'])
     inc = preprocessor.named_transformers_['inc'].get_feature_names_out(input_features = ['income'])
 
+    # Rename the encoded gender column to 'gender_male'
+    gen = ['gender_male' if name == 'gender' else name for name in gen]
+
     feature_names = np.concatenate([num, cat, wrk, occ, nat, edu, gen, inc])
+    
+    # Store the one-hot encoded columns and their indices
+    one_hot_encoded_columns = {
+        'workclass': {name: idx for idx, name in enumerate(feature_names) if name.startswith('workclass')},
+        'race': {name: idx for idx, name in enumerate(feature_names) if name.startswith('race')},
+        'marital-status': {name: idx for idx, name in enumerate(feature_names) if name.startswith('marital')},
+        'relationship': {name: idx for idx, name in enumerate(feature_names) if name.startswith('relationship')},
+        'occupation': {name: idx for idx, name in enumerate(feature_names) if name.startswith('occupation')},
+        'native-country': {name: idx for idx, name in enumerate(feature_names) if name.startswith('native-country')},
+        'gender': {name: idx for idx, name in enumerate(feature_names) if name.startswith('gender')}
+    }
+    
     
     processed_df = pd.DataFrame(processed.toarray(), columns = feature_names)
 
-    return processed_df
+    return processed_df, one_hot_encoded_columns
 
 
 
