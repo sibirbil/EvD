@@ -15,17 +15,24 @@ def decode_synthetic_instance(x_i, encoded_cols):
     """
     one_hot_encoded_cols: Dictionary mapping one-hot encoded columns
     """
-  
+    def sigmoid(x):
+        return 1 / (1 + np.exp(-x))
+    
     decoded_values = {}
 
     # Decode features with multiple categories
     for feature, columns in encoded_cols.items():
-        indices = list(columns.values())
-        categories = list(columns.keys())
+        # for binary feature
+        if isinstance(columns, dict) and len(columns) == 1:
+            col_name, col_idx = next(iter(columns.items())) 
+            probability_male = sigmoid(x_i[:,col_idx])  # Apply sigmoid to get probability
+            decoded_values[feature] = 'male' if probability_male > 0.5 else 'female'
         
-        if feature == 'gender':  # Handle binary feature
-            decoded_values[feature] = categories[np.argmax(x_i[:,indices])]
         else:  # Handle multi-category features using softmax
+        
+            indices = list(columns.values())
+            categories = list(columns.keys())
+            
             logits = x_i[:,indices]
             exp_logits = np.exp(logits - np.max(logits))  # Subtract max for numerical stability
             probabilities = exp_logits / np.sum(np.exp(logits))

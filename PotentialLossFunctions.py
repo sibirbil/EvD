@@ -28,10 +28,19 @@ X, y = make_classification(n_samples=500, n_features=5, n_informative=3, n_redun
 
 #### GIVE ME SOME CREDIT DATASET
 
-file_path = ".data/GiveMeSomeCredit.csv"
-X, y = prepare_credit_dataset(file_path)
-column_names = X.columns
 allnumeric = 1
+
+df, X, y, column_names = create_datasets.get_gmsc()
+
+#X = X.to_numpy().astype(float)
+y = y.to_numpy()
+
+# # Split the dataset
+# train_df, test_df = train_test_split(df, test_size=0.2, random_state=10)
+# X = train_df.drop(columns=['SeriousDlqin2yrs'])
+# y = train_df['SeriousDlqin2yrs']
+# X_test = test_df.drop(columns=['SeriousDlqin2yrs'])
+# y_test = test_df['SeriousDlqin2yrs']
 
 #####
 
@@ -40,21 +49,40 @@ allnumeric = 1
 
 allnumeric = 0  # the dataset is all numeric, no need to have decoding
 
-df = create_datasets.get_adult()
+df, encoded_cols = create_datasets.get_adult()
+
+# Split the dataset
+#train_df, test_df = train_test_split(df, test_size=0.2, random_state=10)
+#X = train_df.drop(columns=['income'])
+#y = train_df['income']
+
 X = df.drop(columns=['income'])
 y = df['income']
 column_names = X.columns
 
+X = X.to_numpy().astype(float)
+y = y.to_numpy()
+
 ##########
 
 
-###### FICO DATASET
-allnumeric = 1
-X = FICO_dataset.X
-y = FICO_dataset.y
-column_names = X.columns
+#### FICO
 
-#################
+allnumeric = 1
+
+df, X, y, column_names = create_datasets.get_fico()
+
+#X = X.to_numpy().astype(float)
+y = y.to_numpy()
+
+# # Split the dataset
+# train_df, test_df = train_test_split(df, test_size=0.2, random_state=10)
+# X = train_df.drop(columns=[RiskPerformance'])
+# y = train_df['RiskPerformance']
+# X_test = test_df.drop(columns=['RiskPerformance'])
+# y_test = test_df['RiskPerformance']
+
+#####
 
 """
 
@@ -62,35 +90,24 @@ column_names = X.columns
 # Istedigin datasetini yukaridan kopyalayip asagida deneyebilirsin
 ######################
 
-##### ADULT DATASET
 
-allnumeric = 0  # the dataset is all numeric, no need to have decoding
+#### FICO
 
-df, encoded_cols = create_datasets.get_adult()
-# Split the dataset
-train_df, test_df = train_test_split(df, test_size=0.2, random_state=10)
+allnumeric = 1
 
+df, X, y, column_names = create_datasets.get_fico()
 
-X = train_df.drop(columns=['income'])
-y = train_df['income']
-column_names = X.columns
-
-##########
-
-# initialize standardScaler and scale numeric columns
-# scaler = StandardScaler()
-# df[numeric_columns] = scaler.fit_transform(df[numeric_columns])
-
-
-X = X.to_numpy().astype(float)
+#X = X.to_numpy().astype(float)
 y = y.to_numpy()
 
-#X = df.iloc[:,0:-1].to_numpy()
-#y = df["class"].to_numpy()
+# # Split the dataset
+# train_df, test_df = train_test_split(df, test_size=0.2, random_state=10)
+# X = train_df.drop(columns=[RiskPerformance'])
+# y = train_df['RiskPerformance']
+# X_test = test_df.drop(columns=['RiskPerformance'])
+# y_test = test_df['RiskPerformance']
 
-#scaler = StandardScaler()
-#X = scaler.fit_transform(X)
-
+#####
 
 # train a logistic regression model
 log_reg = LogisticRegression(max_iter = 15000)
@@ -113,10 +130,8 @@ for i in range(len(y)):
 
 confusion_matrix(y, y_pred_train) 
 
+"""
 # Test Data
-X_test = test_df.drop(columns=['income'])
-y_test = test_df['income']
-
 X_test = X_test.to_numpy().astype(float)
 y_test = y_test.to_numpy()
 
@@ -125,9 +140,7 @@ y_pred_test = log_reg.predict(X_test)
 
 # Compute the confusion matrix
 result_test = confusion_matrix(y_test, y_pred_test)
-
-
-
+"""
 
 
 X = jnp.array(X)
@@ -136,7 +149,9 @@ y = jnp.array(y)
 
 def F_function(
     X    : jax.Array, 
-    y    : jax.Array
+    y    : jax.Array,
+    lambda_reg,
+    reg_type="L2" 
     ):
     
     D = jnp.hstack([X, jnp.ones(X.shape[0]).reshape(-1,1)])
@@ -150,8 +165,16 @@ def F_function(
         logits = D @ theta
         #term1 = jnp.log(1 + jnp.exp(logits))  # log(1 + exp(x_i^T theta))
         term1 = -jax.nn.log_sigmoid(-logits)
-        term2 = y * logits 
-        return jnp.mean(term1 - term2)
+        term2 = y * logits
+        base_loss = jnp.mean(term1 - term2)
+        
+        if reg_type == "L2":
+            regularizer = lambda_reg * jnp.sum(theta**2)  # L2 regularization
+        else: # reg_type == "L1":
+            regularizer = lambda_reg * jnp.sum(jnp.abs(theta))  # L1 regularization
+           
+        return base_loss + regularizer
+ 
 
     return F, jax.grad(F)
 
@@ -164,7 +187,7 @@ num_gd_steps = 10000  # Number of steps
 
 
 # Gradient descent
-F, gradF = F_function(X, y)
+F, gradF = F_function(X, y, lambda_reg=0.1, reg_type="L2")
 theta = theta_0
 # loss_values = []
 # tolerance = 0.000001  
@@ -192,18 +215,19 @@ key, subkey = random.split(key)
 
 
 state_theta = (key, theta_0)   #(theta_0, key)
-hypsF = (F, gradF, 0.0001) #last entry is step size
+hypsF = (F, gradF, 0.001) #last entry is step size
 
 (last_key, last), traj_theta = langevin.MALA_chain(state_theta, hypsF, 100000)
 
 thetas = traj_theta[99900:]
-#thetas = theta_0
+thetas = theta_0
 
 def G_function(
         thetas      :jax.Array,
         y_val       :jnp.float_,
         x_s         :jax.Array,
-        lambda_     :jnp.float_,   # for regularization 
+        lambda_T1   :jnp.float_,   # for regularization type1
+        lambda_T2   :jnp.float_,   # for regularization type2
         loss_type   :int           # 1 for Loss 1 (close to 0.5), 2 for Loss 2 (counterfactual)
 ):
     
@@ -212,8 +236,10 @@ def G_function(
             # Loss 1
             d = jnp.hstack([x, 1])
             logits = thetas @ d
-            f_xtheta = 1 / (1 + jnp.exp(-logits))  
-            return jnp.mean(jnp.square(f_xtheta - y_val))*100
+            #f_xtheta = 1 / (1 + jnp.exp(-logits))  
+            f_xtheta = jax.nn.sigmoid(logits)
+            base_loss = jnp.mean(jnp.square(f_xtheta - y_val))
+            return base_loss + lambda_T1*jnp.sum(x**2)
         
         elif loss_type == 2:
             # Loss 2
@@ -226,7 +252,7 @@ def G_function(
             term2 = y_val * logits 
             difference = jnp.mean(term1 - term2)
             
-            return squared_distance + lambda_ * difference
+            return squared_distance + lambda_T2 * difference
         
         else:
             raise ValueError("Invalid loss_type.")
@@ -241,13 +267,17 @@ def G_function(
 #x_0 = jnp.array(X[45])  #private, white, female, 1
 #x_0 = jnp.array(X[319]) #others, male, 1
 #x_0 = jnp.array(X[346]) #others, female, 1
-x_0 = jnp.array(X[1])   #private, white, male, 0
+#x_0 = jnp.array(X[1])   #private, white, male, 0
 #x_0 = jnp.array(X[4])   #private, white, female, 0
 #x_0 = jnp.array(X[6])   #private, others, male, 0
 #x_0 = jnp.array(X[48])   #private, others, female, 0
 
+# These points are picked for the GMSC dataset
+#x_0 = jnp.array(X[9])  # y_prob = 0.26, this point is for loss type 1
+#x_0 = jnp.array(X[3])  # y_prob = 0.15, this point is for loss type 1
+
 # These points are picked for the FICO dataset
-#x_0 = jnp.array(X[1])  # y_prob = 0.93, this point is for loss type 1
+x_0 = jnp.array(X[1])  # y_prob = 0.93, this point is for loss type 1
 #x_0 = jnp.array(X[7])  # y_prob = 0.34 this point is for loss type 2
 
 
@@ -259,14 +289,15 @@ loss_type = 2
 if loss_type == 1:
     # Parameters for Loss function 1
     x_s = []  # Not needed
-    G, gradG = G_function(thetas, 0.5, x_s, lambda_=1, loss_type=1)
+    G, gradG = G_function(thetas, 0.5, x_s, lambda_T1=100, lambda_T2=1, loss_type=1)
 
 elif loss_type == 2:
     # Parameters for Loss function 2
     # x_s = jnp.array([0.1, 0.3, -1.2, 0.4, 0.1])  # Specific point for Loss function 2
-    x_s = jnp.array(X[21])   # for Adult dataset (black, private, female)
-    #x_s = jnp.array(X[10])   # for FICO dataset, y_prob = 0.27 
-    G, gradG = G_function(thetas, 1, x_s, lambda_=50, loss_type=2)
+    #x_s = jnp.array(X[21])   # for Adult dataset (black, private, female)
+    x_s = jnp.array(X[10])   # for FICO dataset, y_prob = 0.27 
+    #x_s = jnp.array(X[0])   # for GMSC dataset y_prob = 0.15  
+    G, gradG = G_function(thetas, 1, x_s, lambda_T1=1, lambda_T2=10, loss_type=2)
 
 else:
     raise ValueError("Invalid loss_type.")
@@ -325,6 +356,13 @@ if allnumeric ==0:
 
 # Compute Euclidean distances between each point in last_xs and x_0
 distances = compute_distances(last_xs, x_0)
+
+if loss_type == 2:
+    distances_xs = compute_distances(last_xs, x_s)
+    print("Distance from the target point (x_s):")
+    for stat, value in distances_xs.items():
+        print(f"{stat}: {value:.4f}")
+    
 
 # Print the statistics
 print("Distance from Initial Point (x_0):")

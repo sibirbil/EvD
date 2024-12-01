@@ -99,9 +99,9 @@ def _check_file_paths(file_paths):
 
 _check_file_paths(file_paths)
 
-##
+##################
 ## ADULT
-##
+##################
 
 _region_dict = {
     'United-States': 'North-America',
@@ -266,7 +266,64 @@ def get_adult():
 
     return processed_df, one_hot_encoded_columns
 
+##################
+## GMSC
+##################
 
+def get_gmsc():
+
+    df = pd.read_csv(file_paths['gmsc'])
+    iqr_multiplier = 2  # for outliers
+
+   # Impute missing values using the median for all input columns
+    imputer = SimpleImputer(strategy='median')
+    input_cols = df.columns  # All feature columns
+    df[input_cols] = imputer.fit_transform(df[input_cols])
+
+
+    # Remove outliers for relevant columns
+    df = remove_outliers(df, 'DebtRatio', iqr_multiplier)
+    df = remove_outliers(df, 'MonthlyIncome', iqr_multiplier)
+
+    # Split the dataset into features (X) and target (y)
+    y = df['SeriousDlqin2yrs']
+    X = df.drop(columns=['SeriousDlqin2yrs'])
+    
+    columns = X.columns
+    # Initialize the scaler
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    return df, X, y, columns
+
+
+def remove_outliers(df, column_name, iqr_multiplier = 2):
+    # TODO check this iqr multiplier default value if it is too stringent
+    q1 = df[column_name].quantile(0.25)
+    q3 = df[column_name].quantile(0.75)
+    iqr = q3 - q1
+    lower_bound = q1 - iqr_multiplier * iqr
+    upper_bound = q3 + iqr_multiplier * iqr
+    df = df[(df[column_name] >= lower_bound) & \
+            (df[column_name] <= upper_bound)]
+    return df
+
+
+##################
+## FICO
+##################
+
+def get_fico():
+    
+    df = pd.read_csv(file_paths['fico'])
+    X = df.drop(columns = 'RiskPerformance')
+    y = df.RiskPerformance.replace(to_replace=['Bad', 'Good'], value=[1, 0])
+    columns = X.columns
+    # Initialize the scaler
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    
+    return df, X, y, columns
 
 
 #############################
