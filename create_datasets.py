@@ -180,17 +180,27 @@ def get_adult():
         'age', 'educational-num', 'capital-gain',
         'capital-loss', 'hours-per-week', 'fnlwgt'
         ]
+    
+    numerical_scaler = StandardScaler()
     numerical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='mean')),
-        ('scaler', StandardScaler())
+        ('scaler', numerical_scaler)
         ])
 
 
+    # Ordinal encoding followed by scaling for "education"
+    education_scaler = StandardScaler()
+    education_transformer = Pipeline(steps=[
+        ('encoder', OrdinalEncoder(categories=[_education_order])),
+        ('scaler', education_scaler)
+    ])
+
+     
     categorical_columns = ['marital-status', 'relationship', 'race']
     categorical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('one_hot', OneHotEncoder())]            # 7 + 6 + 5 = 18 classes
-        )
+        ('one_hot', OneHotEncoder())   # 7 + 6 + 5 = 18 classes
+    ])
     
 
     workclass_consolidator = FunctionTransformer(utils.fn_from_dict(_workclass_dict))
@@ -215,18 +225,22 @@ def get_adult():
     ])
     
     
-    education_encoder = OrdinalEncoder(categories=[_education_order])
+    #education_encoder = OrdinalEncoder(categories=[_education_order])
+    # Gender transformation with OrdinalEncoder followed by StandardScaler
+    gender_transformer = Pipeline(steps=[
+        ('encoder', OrdinalEncoder())
+    ])
 
     
     # putting it all together
     preprocessor = ColumnTransformer(transformers=[
         ('num', numerical_transformer, numerical_columns),
+        ('edu', education_transformer, ['education']),      # Education column
         ('cat', categorical_transformer, categorical_columns),
         ('wrk', workclass_transformer, ['workclass']),
         ('occ', occupation_transformer, ['occupation']),
         ('nat', country_transformer, ['native-country']),
-        ('edu', education_encoder, ['education']),
-        ('gen', OrdinalEncoder(), ['gender']),
+        ('gen', gender_transformer, ['gender']),
         ('inc', OrdinalEncoder(), ['income'])],
         verbose_feature_names_out=True
         )
@@ -237,6 +251,7 @@ def get_adult():
     # transformers in the above pipeline (such as FunctionTransformer) has such a method defined. 
     # thus we have to get their names one by one, IN THE SAME ORDER, and concatenate to get column names.
     num = preprocessor.named_transformers_['num'].get_feature_names_out(input_features = numerical_columns)
+    edu = ['education']  
     cat = preprocessor.named_transformers_['cat'].get_feature_names_out(input_features = categorical_columns)
     wrk = preprocessor.named_transformers_['wrk'].named_steps['one_hot'].get_feature_names_out(input_features = ['workclass'])
     occ = preprocessor.named_transformers_['occ'].named_steps['one_hot'].get_feature_names_out(input_features = ['occupation'])
@@ -248,8 +263,17 @@ def get_adult():
     # Rename the encoded gender column to 'gender_male'
     gen = ['gender_male' if name == 'gender' else name for name in gen]
 
-    feature_names = np.concatenate([num, cat, wrk, occ, nat, edu, gen, inc])
+    feature_names = np.concatenate([num, edu, cat, wrk, occ, nat, gen, inc])
     
+    processed_df = pd.DataFrame(processed.toarray(), columns = feature_names)
+
+    # # Manually scale one-hot encoded columns
+    # one_hot_columns = np.concatenate([cat, wrk, occ, nat, gen])
+    # for col in one_hot_columns:
+    #     mean = processed_df[col].mean()
+    #     std = processed_df[col].std()
+    #     processed_df[col] = (processed_df[col] - mean) / (std if std > 0 else 1)
+
     # Store the one-hot encoded columns and their indices
     one_hot_encoded_columns = {
         'workclass': {name: idx for idx, name in enumerate(feature_names) if name.startswith('workclass')},
@@ -260,11 +284,10 @@ def get_adult():
         'native-country': {name: idx for idx, name in enumerate(feature_names) if name.startswith('native-country')},
         'gender': {name: idx for idx, name in enumerate(feature_names) if name.startswith('gender')}
     }
-    
-    
-    processed_df = pd.DataFrame(processed.toarray(), columns = feature_names)
 
-    return processed_df, one_hot_encoded_columns
+
+
+    return processed_df, df, one_hot_encoded_columns
 
 ##################
 ## GMSC

@@ -1,4 +1,5 @@
 import numpy as np
+import utils
 import jax
 import jax.numpy as jnp
 import langevin
@@ -91,23 +92,47 @@ y = y.to_numpy()
 ######################
 
 
-#### FICO
+##### ADULT DATASET
 
-allnumeric = 1
+allnumeric = 0  # the dataset is all numeric, no need to have decoding
 
-df, X, y, column_names = create_datasets.get_fico()
+df, original_df, encoded_cols = create_datasets.get_adult()
 
-#X = X.to_numpy().astype(float)
+# # Define the categories you want to drop
+# categories_to_drop = ['occupation', 'marital-status', 'relationship', 'native-country']  # Add more categories as needed
+
+# # Collect all columns to drop
+# columns_to_drop = []
+# for category in categories_to_drop:
+#     if category in encoded_cols:
+#         columns_to_drop.extend(encoded_cols.pop(category).keys())  # Remove the category and collect column names
+
+# # Drop the columns from the DataFrame
+# df = df.drop(columns=columns_to_drop)
+
+
+# # Update indices in encoded_cols to reflect the updated DataFrame
+# encoded_cols = {
+#     key: {col: df.columns.get_loc(col) for col in cols.keys() if col in df.columns}
+#     for key, cols in encoded_cols.items()
+#     }
+
+
+
+# Split the dataset
+#train_df, test_df = train_test_split(df, test_size=0.2, random_state=10)
+#X = train_df.drop(columns=['income'])
+#y = train_df['income']
+
+X = df.drop(columns=['income'])
+y = df['income']
+column_names = X.columns
+
+X = X.to_numpy().astype(float)
 y = y.to_numpy()
 
-# # Split the dataset
-# train_df, test_df = train_test_split(df, test_size=0.2, random_state=10)
-# X = train_df.drop(columns=[RiskPerformance'])
-# y = train_df['RiskPerformance']
-# X_test = test_df.drop(columns=['RiskPerformance'])
-# y_test = test_df['RiskPerformance']
+##########
 
-#####
 
 # train a logistic regression model
 log_reg = LogisticRegression(max_iter = 15000)
@@ -210,7 +235,7 @@ theta = theta_0
 theta_0 = jnp.array(np.array(theta_values)) #theta
 
 
-key = random.PRNGKey(42)
+key = random.PRNGKey(24)
 key, subkey = random.split(key)
 
 
@@ -238,7 +263,8 @@ def G_function(
             logits = thetas @ d
             #f_xtheta = 1 / (1 + jnp.exp(-logits))  
             f_xtheta = jax.nn.sigmoid(logits)
-            base_loss = jnp.mean(jnp.square(f_xtheta - y_val))
+            base_loss = jnp.mean(jnp.square(f_xtheta - y_val))*50
+            # lambda_T1 = 1
             return base_loss + lambda_T1*jnp.sum(x**2)
         
         elif loss_type == 2:
@@ -263,7 +289,7 @@ def G_function(
 #x_0 = jnp.array([0.5, 0.5, 0.5, 2., -1.])  # initial point #jnp.array(np.zeros(31))
 
 # These points are picked for the Adult dataset
-#x_0 = jnp.array(X[10])   #private, white, male, 1
+x_0 = jnp.array(X[10])   #private, white, male, 1
 #x_0 = jnp.array(X[45])  #private, white, female, 1
 #x_0 = jnp.array(X[319]) #others, male, 1
 #x_0 = jnp.array(X[346]) #others, female, 1
@@ -277,25 +303,25 @@ def G_function(
 #x_0 = jnp.array(X[3])  # y_prob = 0.15, this point is for loss type 1
 
 # These points are picked for the FICO dataset
-x_0 = jnp.array(X[1])  # y_prob = 0.93, this point is for loss type 1
+#x_0 = jnp.array(X[1])  # y_prob = 0.93, this point is for loss type 1
 #x_0 = jnp.array(X[7])  # y_prob = 0.34 this point is for loss type 2
 
 
 # Set the loss_type to select the loss function
 # Set to 1 for Loss function 1 (close to the boudnary 0.5)
 # or 2 for Loss function 2 (counterfactual)
-loss_type = 2  
+loss_type = 1  
 
 if loss_type == 1:
     # Parameters for Loss function 1
     x_s = []  # Not needed
-    G, gradG = G_function(thetas, 0.5, x_s, lambda_T1=100, lambda_T2=1, loss_type=1)
+    G, gradG = G_function(thetas, 0.5, x_s, lambda_T1=1, lambda_T2=1, loss_type=1)
 
 elif loss_type == 2:
     # Parameters for Loss function 2
     # x_s = jnp.array([0.1, 0.3, -1.2, 0.4, 0.1])  # Specific point for Loss function 2
-    #x_s = jnp.array(X[21])   # for Adult dataset (black, private, female)
-    x_s = jnp.array(X[10])   # for FICO dataset, y_prob = 0.27 
+    x_s = jnp.array(X[21])   # for Adult dataset (black, private, female)
+    #x_s = jnp.array(X[10])   # for FICO dataset, y_prob = 0.27 
     #x_s = jnp.array(X[0])   # for GMSC dataset y_prob = 0.15  
     G, gradG = G_function(thetas, 1, x_s, lambda_T1=1, lambda_T2=10, loss_type=2)
 
@@ -304,7 +330,7 @@ else:
 
 
 state_x = (subkey, x_0)
-hypsG = G, gradG, 0.001
+hypsG = G, gradG, utils.sqrt_decay(0.01)
 
 _, traj_x = langevin.MALA_chain(state_x, hypsG, 10000)
 
