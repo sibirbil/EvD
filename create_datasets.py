@@ -99,9 +99,9 @@ def _check_file_paths(file_paths):
 
 _check_file_paths(file_paths)
 
-##
+##################
 ## ADULT
-##
+##################
 
 _region_dict = {
     'United-States': 'North-America',
@@ -180,17 +180,27 @@ def get_adult():
         'age', 'educational-num', 'capital-gain',
         'capital-loss', 'hours-per-week', 'fnlwgt'
         ]
+    
+    numerical_scaler = StandardScaler()
     numerical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='mean')),
-        ('scaler', StandardScaler())
+        ('scaler', numerical_scaler)
         ])
 
 
+    # Ordinal encoding followed by scaling for "education"
+    education_scaler = StandardScaler()
+    education_transformer = Pipeline(steps=[
+        ('encoder', OrdinalEncoder(categories=[_education_order])),
+        ('scaler', education_scaler)
+    ])
+
+     
     categorical_columns = ['marital-status', 'relationship', 'race']
     categorical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('one_hot', OneHotEncoder())]            # 7 + 6 + 5 = 18 classes
-        )
+        ('one_hot', OneHotEncoder())   # 7 + 6 + 5 = 18 classes
+    ])
     
 
     workclass_consolidator = FunctionTransformer(utils.fn_from_dict(_workclass_dict))
@@ -215,18 +225,22 @@ def get_adult():
     ])
     
     
-    education_encoder = OrdinalEncoder(categories=[_education_order])
+    #education_encoder = OrdinalEncoder(categories=[_education_order])
+    # Gender transformation with OrdinalEncoder followed by StandardScaler
+    gender_transformer = Pipeline(steps=[
+        ('encoder', OrdinalEncoder())
+    ])
 
     
     # putting it all together
     preprocessor = ColumnTransformer(transformers=[
         ('num', numerical_transformer, numerical_columns),
+        ('edu', education_transformer, ['education']),      # Education column
         ('cat', categorical_transformer, categorical_columns),
         ('wrk', workclass_transformer, ['workclass']),
         ('occ', occupation_transformer, ['occupation']),
         ('nat', country_transformer, ['native-country']),
-        ('edu', education_encoder, ['education']),
-        ('gen', OrdinalEncoder(), ['gender']),
+        ('gen', gender_transformer, ['gender']),
         ('inc', OrdinalEncoder(), ['income'])],
         verbose_feature_names_out=True
         )
@@ -237,6 +251,7 @@ def get_adult():
     # transformers in the above pipeline (such as FunctionTransformer) has such a method defined. 
     # thus we have to get their names one by one, IN THE SAME ORDER, and concatenate to get column names.
     num = preprocessor.named_transformers_['num'].get_feature_names_out(input_features = numerical_columns)
+    edu = ['education']  
     cat = preprocessor.named_transformers_['cat'].get_feature_names_out(input_features = categorical_columns)
     wrk = preprocessor.named_transformers_['wrk'].named_steps['one_hot'].get_feature_names_out(input_features = ['workclass'])
     occ = preprocessor.named_transformers_['occ'].named_steps['one_hot'].get_feature_names_out(input_features = ['occupation'])
@@ -245,13 +260,93 @@ def get_adult():
     gen = preprocessor.named_transformers_['gen'].get_feature_names_out(input_features = ['gender'])
     inc = preprocessor.named_transformers_['inc'].get_feature_names_out(input_features = ['income'])
 
-    feature_names = np.concatenate([num, cat, wrk, occ, nat, edu, gen, inc])
+    # Rename the encoded gender column to 'gender_male'
+    gen = ['gender_male' if name == 'gender' else name for name in gen]
+
+    feature_names = np.concatenate([num, edu, cat, wrk, occ, nat, gen, inc])
     
     processed_df = pd.DataFrame(processed.toarray(), columns = feature_names)
 
-    return processed_df
+    # # Manually scale one-hot encoded columns
+    # one_hot_columns = np.concatenate([cat, wrk, occ, nat, gen])
+    # for col in one_hot_columns:
+    #     mean = processed_df[col].mean()
+    #     std = processed_df[col].std()
+    #     processed_df[col] = (processed_df[col] - mean) / (std if std > 0 else 1)
+
+    # Store the one-hot encoded columns and their indices
+    one_hot_encoded_columns = {
+        'workclass': {name: idx for idx, name in enumerate(feature_names) if name.startswith('workclass')},
+        'race': {name: idx for idx, name in enumerate(feature_names) if name.startswith('race')},
+        'marital-status': {name: idx for idx, name in enumerate(feature_names) if name.startswith('marital')},
+        'relationship': {name: idx for idx, name in enumerate(feature_names) if name.startswith('relationship')},
+        'occupation': {name: idx for idx, name in enumerate(feature_names) if name.startswith('occupation')},
+        'native-country': {name: idx for idx, name in enumerate(feature_names) if name.startswith('native-country')},
+        'gender': {name: idx for idx, name in enumerate(feature_names) if name.startswith('gender')}
+    }
 
 
+
+    return processed_df, df, one_hot_encoded_columns
+
+##################
+## GMSC
+##################
+
+def get_gmsc():
+
+    df = pd.read_csv(file_paths['gmsc'])
+    iqr_multiplier = 2  # for outliers
+
+   # Impute missing values using the median for all input columns
+    imputer = SimpleImputer(strategy='median')
+    input_cols = df.columns  # All feature columns
+    df[input_cols] = imputer.fit_transform(df[input_cols])
+
+
+    # Remove outliers for relevant columns
+    df = remove_outliers(df, 'DebtRatio', iqr_multiplier)
+    df = remove_outliers(df, 'MonthlyIncome', iqr_multiplier)
+
+    # Split the dataset into features (X) and target (y)
+    y = df['SeriousDlqin2yrs']
+    X = df.drop(columns=['SeriousDlqin2yrs'])
+    
+    columns = X.columns
+    # Initialize the scaler
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    return df, X, y, columns
+
+
+def remove_outliers(df, column_name, iqr_multiplier = 2):
+    # TODO check this iqr multiplier default value if it is too stringent
+    q1 = df[column_name].quantile(0.25)
+    q3 = df[column_name].quantile(0.75)
+    iqr = q3 - q1
+    lower_bound = q1 - iqr_multiplier * iqr
+    upper_bound = q3 + iqr_multiplier * iqr
+    df = df[(df[column_name] >= lower_bound) & \
+            (df[column_name] <= upper_bound)]
+    return df
+
+
+##################
+## FICO
+##################
+
+def get_fico():
+    
+    df = pd.read_csv(file_paths['fico'])
+    X = df.drop(columns = 'RiskPerformance')
+    y = df.RiskPerformance.replace(to_replace=['Bad', 'Good'], value=[1, 0])
+    columns = X.columns
+    # Initialize the scaler
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    
+    return df, X, y, columns
 
 
 #############################

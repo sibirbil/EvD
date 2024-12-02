@@ -10,32 +10,35 @@ import numpy as np
 import pandas as pd
 
 
-def decode_synthetic_instance(x_i):
+def decode_synthetic_instance(x_i, encoded_cols):
+    
     """
-    Decodes the encoded columns in a synthetic data instance x_i.
-
-    Args:
-        x_i (numpy.ndarray): A single synthetic data instance as a numpy array.
-
-    Returns:
-        tuple: Decoded values for workclass, race, and gender.
+    one_hot_encoded_cols: Dictionary mapping one-hot encoded columns
     """
-    # Indices for encoded columns
-    workclass_indices = [7, 8, 9]  # workclass_government, workclass_others, workclass_private
-    race_index = 10  # race_white
-    gender_index = 11  # gender_Male
+    def sigmoid(x):
+        return 1 / (1 + np.exp(-x))
+    
+    decoded_values = {}
 
-    # Decode workclass using softmax
-    workclass_logits = x_i[0, workclass_indices]
-    workclass_probabilities = np.exp(workclass_logits) / np.sum(np.exp(workclass_logits))
-    workclass_categories = ['government', 'others', 'private']
-    workclass_decoded = workclass_categories[np.argmax(workclass_probabilities)]
+    # Decode features with multiple categories
+    for feature, columns in encoded_cols.items():
+        # for binary feature
+        if isinstance(columns, dict) and len(columns) == 1:
+            col_name, col_idx = next(iter(columns.items())) 
+            probability_male = sigmoid(x_i[:,col_idx])  # Apply sigmoid to get probability
+            decoded_values[feature] = 'male' if probability_male > 0.5 else 'female'
+        
+        else:  # Handle multi-category features using softmax
+        
+            indices = list(columns.values())
+            categories = list(columns.keys())
+            
+            logits = x_i[:,indices]
+            exp_logits = np.exp(logits - np.max(logits))  # Subtract max for numerical stability
+            probabilities = exp_logits / np.sum(np.exp(logits))
+            decoded_values[feature] = categories[np.argmax(probabilities)]
 
-    # Decode race and gender
-    race_decoded = 'white' if x_i[0, race_index] > 0.5 else 'others'
-    gender_decoded = 'Male' if x_i[0, gender_index] > 0.5 else 'Female'
-
-    return workclass_decoded, race_decoded, gender_decoded
+    return decoded_values
 
 
 def compare_synthetic_instances(columns, x_s, x_sample, x_0):
@@ -69,7 +72,7 @@ def compare_synthetic_instances(columns, x_s, x_sample, x_0):
     })
     return comparison
 
-def compare_categorical_changes(last_xs, x_0, decode_synthetic_instance):
+def compare_categorical_changes(last_xs, x_0, decode_synthetic_instance, encoded_cols):
     """
     Compares decoded categorical variables between `last_xs` and `x_0`.
 
@@ -82,16 +85,19 @@ def compare_categorical_changes(last_xs, x_0, decode_synthetic_instance):
         pd.DataFrame: Summary of categorical changes.
     """
     # Decode categorical variables
-    decoded_last_xs = [decode_synthetic_instance(x.reshape(1, -1)) for x in last_xs]
-    decoded_x_0 = decode_synthetic_instance(x_0.reshape(1, -1))
+    decoded_last_xs = [decode_synthetic_instance(x.reshape(1, -1), encoded_cols) for x in last_xs]
+    decoded_x_0 = decode_synthetic_instance(x_0.reshape(1, -1), encoded_cols)
+    
+    # Dynamically create columns based on one_hot_encoded_cols keys
+    columns = list(encoded_cols.keys())
     
     # Convert to DataFrames for comparison
-    df_last_xs = pd.DataFrame(decoded_last_xs, columns=["workclass", "race", "gender"])
-    df_x_0 = pd.DataFrame([decoded_x_0] * len(last_xs), columns=["workclass", "race", "gender"])
+    df_last_xs = pd.DataFrame(decoded_last_xs)
+    df_x_0 = pd.DataFrame([decoded_x_0] * len(last_xs))
     
     # Compare and count flips
     flip_summary = (df_last_xs != df_x_0).apply(pd.Series.value_counts).fillna(0).astype(int)
-    flip_summary.columns = ["workclass_flips", "race_flips", "gender_flips"]
+    flip_summary.columns = [f"{col}_flips" for col in columns]
     
     return flip_summary
 
@@ -99,12 +105,14 @@ def compare_categorical_changes(last_xs, x_0, decode_synthetic_instance):
 
 
 
-def decode_categorical_features(points, decode_synthetic_instance):
+def decode_categorical_features(points, decode_synthetic_instance, encoded_cols):
     decoded_features = []
     for point in points:
-        decoded = decode_synthetic_instance(point.reshape(1, -1))  # Decode each point
+        decoded = decode_synthetic_instance(point.reshape(1, -1), encoded_cols)  # Decode each point
         decoded_features.append(decoded)
-    return pd.DataFrame(decoded_features, columns=["workclass", "race", "gender"])
+   
+    return pd.DataFrame(decoded_features)
+
 
 def compute_distances(last_xs, x_0):
     distances = np.linalg.norm(last_xs - x_0, axis=1)
