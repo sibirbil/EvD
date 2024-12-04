@@ -16,13 +16,13 @@ from math import prod
 # Standard feed forward multi-layer perceptron
 class MLP(nn.Module):
     features    : Tuple[int]
-    input_shape : int | Tuple[int] = (28,28)
+    input_size  : int           = 28*28*1
 
     @nn.compact
     def __call__(self, x : jax.Array):
         
         # reshape to vector (Batch dimension is kept the same)
-        x = x.reshape(-1, prod(self.input_shape))
+        x = x.reshape(-1, self.input_size)
 
         for feature in self.features[:-1]:
             x = nn.Dense(feature)(x)
@@ -48,7 +48,7 @@ class LeNet5(nn.Module):
             x = nn.sigmoid(x)
             x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
         
-        x = x.reshape((x.shape[0], -1))  
+        x = x.reshape(x.shape[0], -1)  
         
         for feature in self.fc_features:
             x = nn.Dense(features=feature)(x)
@@ -230,16 +230,16 @@ class EnsembleTrainState(TrainState):
 def ensemble_create_train_state(
     key             : random.PRNGKey,
     model           : nn.Module, 
-    input_size      : Tuple[int],
+    input_shape     : Tuple[int],
     optimizer       : optax.GradientTransformation,
     ensemble_size   : int
 ) -> EnsembleTrainState:
     
-    ensemble_params = init_ensemble(key, model, input_size, ensemble_size)
+    ensemble_params = init_ensemble(key, model, input_shape, ensemble_size)
     
     return EnsembleTrainState.create(
-        apply_fn = jax.vmap(model.apply), 
-        apply_single = jax.vmap(model.apply, in_axes=(0,None)), 
+        apply_fn = jax.vmap(jax.jit(model.apply)), 
+        apply_single = jax.vmap(jax.jit(model.apply), in_axes=(0,None)), 
         params = ensemble_params,
         tx = optimizer, 
         E = ensemble_size)
@@ -264,6 +264,7 @@ def ensemble_train_step(
     ets = ets.apply_gradients(grads = grads)
     return ets
 
+from time import perf_counter
 
 def ensemble_train(
     key         : random.PRNGKey,
@@ -273,20 +274,30 @@ def ensemble_train(
     nSteps      : int
 ):
     
+    gbt = 0.
+    tst = 0.
+    evt = 0.
     for iStep in range(nSteps):
-        key, subkey = random.split(key)
 
+        key, subkey = random.split(key)
+        t1 = perf_counter()
         #same key gets the corresponding batches
         batches = get_batches(key, ds[:], len(ds), nBatch, ets.E)
-        
+        t2 = perf_counter()
         ets = ensemble_train_step(ets, batches['image'], batches['label'])
-
+        t3 = perf_counter()
         if iStep %100 ==0:
             idx = random.randint(subkey, 1000, 0, len(ds))
             batch  = ds[idx]
             acc, loss = ensemble_eval(ets, batch)
             print(f"Batches: {iStep}, \t Ensemble Train acc: {acc:.2%}, \t loss: {loss:.4f}")
+        t4 = perf_counter()
+        evt += t4 - t3
+        tst += t3 - t2
+        gbt += t2 - t1
 
+    print(f"get batches time {gbt:.2f}, \t train_step time {tst:.2} evaluation time {evt:.2}")
+ 
     return ets
 
 
@@ -306,6 +317,11 @@ def ensemble_most_common_prediction_accuracy(
         return unique_elts[jnp.argmax(counts)]
     mcps = find_modes(predictions.T) #most common predictions per ensemble member
     return jnp.mean(mcps==y_batch)
+
+def ensemble_accuracies(ets :EnsembleTrainState, batch:Dataset):
+    logits = ets.apply_single(ets.params, batch['image'])
+    predictions = jnp.argmax(logits, axis = -1)
+    return jnp.mean( predictions == jnp.broadcast_to(batch['label'], (ets.E, *batch['label'].shape )), axis =-1 )
 
 
 def ensemble_eval(ts : EnsembleTrainState, batch : Dataset):
@@ -372,9 +388,9 @@ def G_function(
     
     @jax.jit
     def G(x):
-        lbl = jax.nn.one_hot(jnp.array(label), 10)
+        #lbl = jax.nn.one_hot(jnp.array(label), 10)
         logits = jax.vmap(partial(model.apply, x = x[jnp.newaxis, :]))(params_traj)
-        losses = (-jax.nn.log_softmax(logits) @ lbl)
+        losses = (-jax.nn.log_softmax(logits)[:, label])
         loss = jnp.mean(losses)
         return beta*(loss + const1*l1_reg(x) + const2*total_variation(x))
     

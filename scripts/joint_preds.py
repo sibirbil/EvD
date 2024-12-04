@@ -5,16 +5,15 @@ import pickle
 import flax
 
 import vae, nets, create_datasets
-import train_utils
+import utils
 
 
 MNIST = create_datasets.get_MNIST('train')
 
 #add extra dimension and get only the images
-MNISTimgs = jnp.expand_dims(MNIST['image'], axis = -1) #shape (60000, 28, 28, 1)
+MNISTimgs = MNIST['image'] #shape (60000, 28, 28, 1)
 
 key = random.PRNGKey(1291)
-
 
 #############
 ##   VAE   ##
@@ -61,14 +60,14 @@ with open(lenet_param_path, 'rb') as f:
 
 # MLP classifier
 features  = [512, 128,32,10]
-mlp = nets.MLP(features)
+mlp = nets.MLP(features = features, input_size= 28*28*1)
 mlp_param_path = "params/mlp_512-128-32-10_MNIST_B256_N5000.pkl"
 with open(mlp_param_path, 'rb') as f:
     mlp_params = mlp.init(key, MNISTimgs[:2])
     mlp_params = flax.serialization.from_bytes(mlp_params, pickle.load(f))
 
 
-label = 8
+label = 5
 beta = 10.
 init_lr = 1e-4
 import langevin
@@ -83,7 +82,7 @@ def G(z):
 
 gradG = jax.grad(G)
 
-hypsG= G, gradG, train_utils.sqrt_decay(init_lr)
+hypsG= G, gradG, utils.sqrt_decay(init_lr)
 z0 = encoder(key, MNISTimgs[1234])
 state_z = key, z0
 
@@ -113,7 +112,7 @@ traj_x = jax.nn.sigmoid(traj_x)
 
 
 # gradPixelG = jax.grad(PixelG)
-# hypsPixelG = PixelG, gradPixelG, train_utils.power_decay(0.1, alpha = 0.75, offset =1 , rate = 10), 0., 1.
+# hypsPixelG = PixelG, gradPixelG, utils.power_decay(0.1, alpha = 0.75, offset =1 , rate = 10), 0., 1.
 # x0 =  MNISTimgs[1000]
 # state_x = key, x0
 
