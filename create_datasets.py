@@ -81,7 +81,7 @@ def get_CIFAR(
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder, FunctionTransformer
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, OneHotEncoder, OrdinalEncoder, FunctionTransformer
 import pandas as pd
 import os
 
@@ -158,11 +158,13 @@ _workclass_dict = {
     'Never-worked': 'others' #too little in number 
     }
 
-_education_order = [
-    "Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th", 
-    "12th", "HS-grad", "Some-college", "Assoc-voc", "Assoc-acdm", "Bachelors", 
-    "Masters", "Prof-school", "Doctorate"
-    ]
+# the educational-num column exactly what comes out of this ordinal transform. 
+
+# _education_order = [
+#     "Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th", 
+#     "12th", "HS-grad", "Some-college", "Assoc-voc", "Assoc-acdm", "Bachelors", 
+#     "Masters", "Prof-school", "Doctorate"
+#     ]
 
     
 def get_adult():
@@ -181,19 +183,19 @@ def get_adult():
         'capital-loss', 'hours-per-week', 'fnlwgt'
         ]
     
-    numerical_scaler = StandardScaler()
+    numerical_scaler = MinMaxScaler()
     numerical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='mean')),
         ('scaler', numerical_scaler)
         ])
 
 
-    # Ordinal encoding followed by scaling for "education"
-    education_scaler = StandardScaler()
-    education_transformer = Pipeline(steps=[
-        ('encoder', OrdinalEncoder(categories=[_education_order])),
-        ('scaler', education_scaler)
-    ])
+    # # Ordinal encoding followed by scaling for "education"
+    # education_scaler = MinMaxScaler()
+    # education_transformer = Pipeline(steps=[
+    #     ('encoder', OrdinalEncoder(categories=[_education_order])),
+    #     ('scaler', education_scaler)
+    # ])
 
      
     categorical_columns = ['marital-status', 'relationship', 'race']
@@ -235,7 +237,7 @@ def get_adult():
     # putting it all together
     preprocessor = ColumnTransformer(transformers=[
         ('num', numerical_transformer, numerical_columns),
-        ('edu', education_transformer, ['education']),      # Education column
+        #('edu', education_transformer, ['education']),      # Education column
         ('cat', categorical_transformer, categorical_columns),
         ('wrk', workclass_transformer, ['workclass']),
         ('occ', occupation_transformer, ['occupation']),
@@ -251,19 +253,18 @@ def get_adult():
     # transformers in the above pipeline (such as FunctionTransformer) has such a method defined. 
     # thus we have to get their names one by one, IN THE SAME ORDER, and concatenate to get column names.
     num = preprocessor.named_transformers_['num'].get_feature_names_out(input_features = numerical_columns)
-    edu = ['education']  
     cat = preprocessor.named_transformers_['cat'].get_feature_names_out(input_features = categorical_columns)
     wrk = preprocessor.named_transformers_['wrk'].named_steps['one_hot'].get_feature_names_out(input_features = ['workclass'])
     occ = preprocessor.named_transformers_['occ'].named_steps['one_hot'].get_feature_names_out(input_features = ['occupation'])
     nat = preprocessor.named_transformers_['nat'].named_steps['one_hot'].get_feature_names_out(input_features = ['native-country'])
-    edu = preprocessor.named_transformers_['edu'].get_feature_names_out(input_features= ['education'])
+    #edu = preprocessor.named_transformers_['edu'].get_feature_names_out(input_features= ['education'])
     gen = preprocessor.named_transformers_['gen'].get_feature_names_out(input_features = ['gender'])
     inc = preprocessor.named_transformers_['inc'].get_feature_names_out(input_features = ['income'])
 
     # Rename the encoded gender column to 'gender_male'
     gen = ['gender_male' if name == 'gender' else name for name in gen]
 
-    feature_names = np.concatenate([num, edu, cat, wrk, occ, nat, gen, inc])
+    feature_names = np.concatenate([num, cat, wrk, occ, nat, gen, inc])
     
     processed_df = pd.DataFrame(processed.toarray(), columns = feature_names)
 

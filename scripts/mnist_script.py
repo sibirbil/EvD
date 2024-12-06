@@ -108,6 +108,6 @@ start = perf_counter()
 
 import plotting
 
-plotting.show_mnist_example(x_traj[G_Steps-1])
+plotting.image_show(x_traj[G_Steps-1])
 end = perf_counter()
 print(f"calculating the G trajectory takes {end - start}")

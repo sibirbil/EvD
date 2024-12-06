@@ -67,7 +67,7 @@ with open(mlp_param_path, 'rb') as f:
     mlp_params = flax.serialization.from_bytes(mlp_params, pickle.load(f))
 
 
-label = 5
+label = 6
 beta = 10.
 init_lr = 1e-4
 import langevin
@@ -77,7 +77,7 @@ def G(z):
     x = jax.nn.sigmoid(decoder(z))
     mlp_logits = mlp.apply(mlp_params, x)
     lenet_logits = lenet.apply(lenet_params, x)
-    loss = - (jax.nn.log_softmax(mlp_logits) + jax.nn.log_softmax(lenet_logits))[0, label]
+    loss = - (jax.nn.log_softmax(lenet_logits) + jax.nn.log_softmax(mlp_logits))[0, label]
     return beta * loss
 
 gradG = jax.grad(G)
