@@ -108,6 +108,13 @@ def logistic_estimator(params, model: nn.Module):
 
     return predictor
 
+def negation_logistic_estimator(params, model : nn.Module):
+
+    def predictor(x):
+        logits = model.apply(params, x)
+        return 1- jnp.round(jax.nn.sigmoid(logits),0)
+    return predictor
+
 
 ## Cost functions
 def square_cost(logits, y_compare):
