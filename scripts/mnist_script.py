@@ -15,10 +15,10 @@ F_Steps = 16
 F_Temp = 100.
 F_eta = 1e-4        #step size in hypsF
 G_Steps = 1000
-G_Temp = 100000.
+G_Temp = 1000.
 G_l1reg = .00025           # ell_1 regularizer constant
 G_tvreg = .001           # total_variation regularization constant
-G_eta = 1e-5       #step size in hypsG
+G_eta = 0.01/G_Temp       #step size in hypsG
 G_label = 5
 
 key = random.PRNGKey(41)

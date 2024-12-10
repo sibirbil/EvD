@@ -177,96 +177,96 @@ def get_adult():
     # 'native-country', 'education', 'gender',
     # The last column is 'income' which is considered to be the TARGET
     
+    # first we apply the non-invertible transforms 
+    # such as imputing or consolidating categories. 
     
-    numerical_columns = [
-        'age', 'educational-num', 'capital-gain',
-        'capital-loss', 'hours-per-week', 'fnlwgt'
-        ]
-    
-    numerical_scaler = MinMaxScaler()
-    numerical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='mean')),
-        ('scaler', numerical_scaler)
-        ])
-
-
-    # # Ordinal encoding followed by scaling for "education"
-    # education_scaler = MinMaxScaler()
-    # education_transformer = Pipeline(steps=[
-    #     ('encoder', OrdinalEncoder(categories=[_education_order])),
-    #     ('scaler', education_scaler)
-    # ])
-
-     
-    categorical_columns = ['marital-status', 'relationship', 'race']
-    categorical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('one_hot', OneHotEncoder())   # 7 + 6 + 5 = 18 classes
-    ])
-    
-
     workclass_consolidator = FunctionTransformer(utils.fn_from_dict(_workclass_dict))
     workclass_transformer = Pipeline(steps =[
         ('imputer', utils.WeightedImputer()),
         ('consolidate', workclass_consolidator),
-        ('one_hot', OneHotEncoder())            # 3 classes after consolidation
-    ])
-
-
-    occupation_transformer = Pipeline(steps=[
-        ('imputer', utils.WeightedImputer()),
-        ('one_hot', OneHotEncoder())            #14 classes
     ])
     
-
+    occupation_transformer = Pipeline(steps=[
+        ('imputer', utils.WeightedImputer()),
+    ])
     region_consolidator = FunctionTransformer(utils.fn_from_dict(_region_dict))
     country_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy = 'most_frequent')),
         ('consolidate', region_consolidator),
-        ('one_hot', OneHotEncoder())            # 7 regions after consolidation
-    ])
-    
-    
-    #education_encoder = OrdinalEncoder(categories=[_education_order])
-    # Gender transformation with OrdinalEncoder followed by StandardScaler
-    gender_transformer = Pipeline(steps=[
-        ('encoder', OrdinalEncoder())
     ])
 
+    #irreversible proprocessing
+    irrev = ColumnTransformer(transformers=[
+        ('wrk', workclass_transformer, ['workclass']),
+        ('occ', occupation_transformer, ['occupation']),
+        ('nat', country_transformer, ['native-country'])
+        ],
+        remainder='passthrough',
+        verbose_feature_names_out=True
+        )
+
+    # imputed and consolidated dataframe
+    imp_and_cons = irrev.fit_transform(df)
+    transformed_cols = ['workclass', 'occupation', 'native-country']
+    untouched_cols = df.columns.drop(transformed_cols)
+    reordered_cols = np.concatenate([transformed_cols, untouched_cols])
+    imp_and_cons_df = pd.DataFrame(imp_and_cons, columns = reordered_cols)
+
+
+    numerical_columns = [
+        'age', 'educational-num', 
+        #'capital-gain', 'capital-loss', 
+        'hours-per-week', 
+        #'fnlwgt'
+        ]
+    categorical_columns = [
+        'race', 'gender', 'native-country', 'workclass', 
+        'occupation', 'marital-status', 'relationship'
+        ]
+    
+    numerical_scaler = MinMaxScaler()
+    numerical_transformer = Pipeline(steps=[
+        ('scaler', numerical_scaler)
+        ]) 
+    categorical_transformer = Pipeline(steps=[
+        ('one_hot', OneHotEncoder(sparse_output=False))   # 5 + 2 + 7 + 3 + 14 + 7 + 6 = 44 classes
+    ])
+    
     
     # putting it all together
     preprocessor = ColumnTransformer(transformers=[
         ('num', numerical_transformer, numerical_columns),
         #('edu', education_transformer, ['education']),      # Education column
         ('cat', categorical_transformer, categorical_columns),
-        ('wrk', workclass_transformer, ['workclass']),
-        ('occ', occupation_transformer, ['occupation']),
-        ('nat', country_transformer, ['native-country']),
-        ('gen', gender_transformer, ['gender']),
+        #('wrk', workclass_transformer, ['workclass']),
+        #('occ', occupation_transformer, ['occupation']),
+        #('nat', country_transformer, ['native-country']),
         ('inc', OrdinalEncoder(), ['income'])],
-        verbose_feature_names_out=True
+        verbose_feature_names_out=False
         )
     
-    processed = preprocessor.fit_transform(df) # as a sparse matrix represeentation
+    processed = preprocessor.fit_transform(imp_and_cons_df) # as a sparse matrix represeentation
 
-    # unfortunately preprocessor.get_feature_names_out() doesn't work since not all of the 
-    # transformers in the above pipeline (such as FunctionTransformer) has such a method defined. 
-    # thus we have to get their names one by one, IN THE SAME ORDER, and concatenate to get column names.
-    num = preprocessor.named_transformers_['num'].get_feature_names_out(input_features = numerical_columns)
-    cat = preprocessor.named_transformers_['cat'].get_feature_names_out(input_features = categorical_columns)
-    wrk = preprocessor.named_transformers_['wrk'].named_steps['one_hot'].get_feature_names_out(input_features = ['workclass'])
-    occ = preprocessor.named_transformers_['occ'].named_steps['one_hot'].get_feature_names_out(input_features = ['occupation'])
-    nat = preprocessor.named_transformers_['nat'].named_steps['one_hot'].get_feature_names_out(input_features = ['native-country'])
-    #edu = preprocessor.named_transformers_['edu'].get_feature_names_out(input_features= ['education'])
-    gen = preprocessor.named_transformers_['gen'].get_feature_names_out(input_features = ['gender'])
-    inc = preprocessor.named_transformers_['inc'].get_feature_names_out(input_features = ['income'])
+    # # unfortunately preprocessor.get_feature_names_out() doesn't work since not all of the 
+    # # transformers in the above pipeline (such as FunctionTransformer) has such a method defined. 
+    # # thus we have to get their names one by one, IN THE SAME ORDER, and concatenate to get column names.
+    # num = preprocessor.named_transformers_['num'].get_feature_names_out(input_features = numerical_columns)
+    # cat = preprocessor.named_transformers_['cat'].get_feature_names_out(input_features = categorical_columns)
+    # wrk = preprocessor.named_transformers_['wrk'].named_steps['one_hot'].get_feature_names_out(input_features = ['workclass'])
+    # occ = preprocessor.named_transformers_['occ'].named_steps['one_hot'].get_feature_names_out(input_features = ['occupation'])
+    # nat = preprocessor.named_transformers_['nat'].named_steps['one_hot'].get_feature_names_out(input_features = ['native-country'])
+    # #edu = preprocessor.named_transformers_['edu'].get_feature_names_out(input_features= ['education'])
+    # gen = preprocessor.named_transformers_['gen'].get_feature_names_out(input_features = ['gender'])
+    # inc = preprocessor.named_transformers_['inc'].get_feature_names_out(input_features = ['income'])
 
-    # Rename the encoded gender column to 'gender_male'
-    gen = ['gender_male' if name == 'gender' else name for name in gen]
+    # # Rename the encoded gender column to 'gender_male'
+    # gen = ['gender_male' if name == 'gender' else name for name in gen]
 
-    feature_names = np.concatenate([num, cat, wrk, occ, nat, gen, inc])
     
-    processed_df = pd.DataFrame(processed.toarray(), columns = feature_names)
+    feature_names = preprocessor.get_feature_names_out()
+    # feature_names = np.concatenate([num, cat, wrk, occ, nat, gen, inc])
+    
+    processed_df = pd.DataFrame(processed, columns = feature_names)
 
     # # Manually scale one-hot encoded columns
     # one_hot_columns = np.concatenate([cat, wrk, occ, nat, gen])
@@ -275,21 +275,57 @@ def get_adult():
     #     std = processed_df[col].std()
     #     processed_df[col] = (processed_df[col] - mean) / (std if std > 0 else 1)
 
-    # Store the one-hot encoded columns and their indices
-    one_hot_encoded_columns = {
-        'workclass': {name: idx for idx, name in enumerate(feature_names) if name.startswith('workclass')},
-        'race': {name: idx for idx, name in enumerate(feature_names) if name.startswith('race')},
-        'marital-status': {name: idx for idx, name in enumerate(feature_names) if name.startswith('marital')},
-        'relationship': {name: idx for idx, name in enumerate(feature_names) if name.startswith('relationship')},
-        'occupation': {name: idx for idx, name in enumerate(feature_names) if name.startswith('occupation')},
-        'native-country': {name: idx for idx, name in enumerate(feature_names) if name.startswith('native-country')},
-        'gender': {name: idx for idx, name in enumerate(feature_names) if name.startswith('gender')}
-    }
+    # # Store the one-hot encoded columns and their indices
+    # one_hot_encoded_columns = {
+    #     'workclass': {name: idx for idx, name in enumerate(feature_names) if name.startswith('workclass')},
+    #     'race': {name: idx for idx, name in enumerate(feature_names) if name.startswith('race')},
+    #     'marital-status': {name: idx for idx, name in enumerate(feature_names) if name.startswith('marital')},
+    #     'relationship': {name: idx for idx, name in enumerate(feature_names) if name.startswith('relationship')},
+    #     'occupation': {name: idx for idx, name in enumerate(feature_names) if name.startswith('occupation')},
+    #     'native-country': {name: idx for idx, name in enumerate(feature_names) if name.startswith('native-country')},
+    #     'gender': {name: idx for idx, name in enumerate(feature_names) if name.startswith('gender')}
+    # }
 
 
+    return processed_df, preprocessor, df#, one_hot_encoded_columns
 
-    return processed_df, df, one_hot_encoded_columns
+def adult_one_hotify(
+    adult       : pd.DataFrame,      # DataFrame with expanded columns.
+    method      : str,               # 'argmax' or 'probabilistic'
+    key         : random.PRNGKey = None # needed for probabilistic method
+    ):
+    """
+    Returns a dataframe which returns the relevant columns as hot according to given method.
+    """
+    X = jnp.array(adult.to_numpy())
+    prefix_list = ['race_', 'gender_', 'native-country_', 'workclass_', 
+                   'occupation_', 'marital-status_', 'relationship_']
+    idxs = list(map(lambda p : utils.get_indices_with_prefix(adult, p), prefix_list))
+    if method == 'argmax':
+        for idx in idxs:
+            X = utils.re_one_hotify_argmax(X, idx)
+    if method == 'probabilistic':
+        for idx in idxs:
+            X = utils.re_one_hotify_probabilistic(key, X, idx)
+    return pd.DataFrame(X, columns = adult.columns)
 
+
+def invert_adult(processed_df, preprocessor: ColumnTransformer):
+    num_trans = preprocessor.named_transformers_['num']
+    num_cols = num_trans.feature_names_in_
+
+    cat_trans = preprocessor.named_transformers_['cat']
+    cat_cols = cat_trans.get_feature_names_out()
+    
+    inv_cat = cat_trans.inverse_transform(processed_df[cat_cols])
+    inv_num = num_trans.inverse_transform(processed_df[num_cols])
+
+    num_df = pd.DataFrame(inv_num, columns = num_cols)
+    cat_df = pd.DataFrame(inv_cat, columns = cat_trans.feature_names_in_)
+    inc_df = pd.DataFrame(processed_df['income'])
+
+    return pd.concat([num_df, cat_df, inc_df], axis=1)
+    
 ##################
 ## GMSC
 ##################
@@ -299,7 +335,7 @@ def get_gmsc():
     df = pd.read_csv(file_paths['gmsc'])
     iqr_multiplier = 2  # for outliers
 
-   # Impute missing values using the median for all input columns
+    # Impute missing values using the median for all input columns
     imputer = SimpleImputer(strategy='median')
     input_cols = df.columns  # All feature columns
     df[input_cols] = imputer.fit_transform(df[input_cols])
@@ -313,12 +349,11 @@ def get_gmsc():
     y = df['SeriousDlqin2yrs']
     X = df.drop(columns=['SeriousDlqin2yrs'])
     
-    columns = X.columns
     # Initialize the scaler
-    scaler = StandardScaler()
+    scaler = MinMaxScaler()
     X = scaler.fit_transform(X)
 
-    return df, X, y, columns
+    return df, X, y, scaler
 
 
 def remove_outliers(df, column_name, iqr_multiplier = 2):
