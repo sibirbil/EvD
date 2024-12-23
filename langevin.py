@@ -123,6 +123,22 @@ def MALA_chain(state, hyps, NSteps):
     return (last_key, last_x), x_traj
 
 
+def ULA_chain(state, hyps, NSteps):
+    _, grad_func, eta, *clip_to = (*hyps, None, None)[:5]    # the function itself is not required for ULA
+    eta = as_scheduler(eta)
+    carry_init = *state, 0
+
+    def f(carry, _):
+        key, x, step = carry
+        lr = eta(step)
+        g = grad_func(x)
+        key, subkey = random.split(key)
+        x_next, _ = langevin_step(key, x, g, lr, clip_to)
+        return (subkey, x_next, step+1), x_next
+    
+    return jax.lax.scan(f, carry_init, None, length = NSteps)
+
+
 ######################################################
 # Below is an earlier version which only works with  #
 # jax.Array's and not PyTree's. Parameters of neural #
@@ -147,17 +163,6 @@ def MALA_chain(state, hyps, NSteps):
 
 
 
-# def ULA_chain(state, hyps, NSteps):
-#     _, grad_func, eta = hyps    # the function value is not required for ULA
-
-#     def f(carry, _):
-#         key, x = carry
-#         g = grad_func(x)
-#         key, subkey = random.split(key)
-#         x_next, _ = langevin_step(key, x, g, eta)
-#         return (subkey, x_next), x_next
-    
-#     return jax.lax.scan(f, state, None, length = NSteps)
 
 
 
