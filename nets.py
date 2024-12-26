@@ -112,19 +112,18 @@ class ConvBlock(nn.Module):
         return x
 
 
-# Define the CIFAR-100 CNN model
 class CNN(nn.Module):
-    num_classes: int = 100
-    dropout_rate : float = 0.
+    cnn_features : Sequence[int]
+    mlp_features : Sequence[int]
+    dropout_rate : float
 
     @nn.compact
     def __call__(self, x, is_training:bool = True):
         
-        x = ConvBlock(features=16,  dropout_rate=self.dropout_rate/4)(x, is_training)
-        x = ConvBlock(features=32, dropout_rate=self.dropout_rate/2)(x, is_training)
-        x = ConvBlock(features=64, dropout_rate=self.dropout_rate)(x, is_training)
-
-        x = MLP_with_dropout(features = (512,256, self.num_classes), dropout_rate = self.dropout_rate/4)(x, is_training)
+        for nFeatures in self.cnn_features:
+            x = ConvBlock(features=nFeatures,  dropout_rate=self.dropout_rate)(x, is_training)
+    
+        x = MLP_with_dropout(features = self.mlp_features, dropout_rate = self.dropout_rate)(x, is_training)
         return x    
     
 
@@ -158,19 +157,24 @@ def F_function(
     model   : nn.Module,
     ds      : Dataset,
     beta    : jnp.float_ #inverse temperature 
-):
+    ):
+    
     xs = ds['x']
     ys = ds['y']
 
     @jax.jit
     def F(params):
-        logits = model.apply(params, xs)
-        a = - jax.nn.log_softmax(logits)
-        loss = jnp.mean(jnp.sum(a*ys, axis = 1))
+        logits = model.apply(params, xs, is_training = False)
+        logprobs = jax.nn.log_softmax(logits)
+        @jax.vmap # for each batch member gets the label column of the B x K logits matrix.
+        def index(logits, label):
+            return logits[label]
+        loss = -jnp.mean(index(logprobs,ys))
         return beta*loss
     
     return F, jax.grad(F)
         
+
 
 from functools import partial
 
@@ -185,10 +189,9 @@ def G_function(
     
     @jax.jit
     def G(x):
-        #lbl = jax.nn.one_hot(jnp.array(label), 10)
-        logits = jax.vmap(partial(model.apply, x = x[jnp.newaxis, :]))(params_traj)
+        logits = jax.vmap(partial(model.apply, x = x, is_training = False))(params_traj)
         losses = (-jax.nn.log_softmax(logits)[:, label])
         loss = jnp.mean(losses)
-        return beta*(loss + const1*l1_reg(x) + const2*total_variation(x))
+        return beta*(loss + const1*l1_reg(x) + const2*total_variation(x.squeeze()))
     
     return G, jax.grad(G)

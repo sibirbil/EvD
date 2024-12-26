@@ -37,6 +37,19 @@ def harmonic_decay(init_lr):
     return power_decay(init_lr, 1)
 
 
+##############################
+## MAKE PARAMS a TRAJECTORY ##
+##############################
+
+def make_traj(params):
+    """
+    add a vacuous leading dimension
+    so that it can be fed into F funciton.
+    """
+    f = lambda x : jnp.expand_dims(x, 0)
+    return jax.tree.map(f, params)
+
+
 ###########################
 ## DATA PREPRATION UTILS ##
 ###########################

@@ -12,7 +12,7 @@ key = random.PRNGKey(234)
 MNIST = create_datasets.get_MNIST('train')
 
 #add extra dimension and get only the images
-MNISTimgs = jnp.expand_dims(MNIST['image'], axis = -1) #shape (60000, 28, 28, 1)
+MNISTimgs = MNIST['x'] #shape (60000, 28, 28, 1)
 
 import vae
 
@@ -68,8 +68,8 @@ def reconstruction(x :jax.Array, ts: vae.TrainState):
 
 import plotting
 
-plotting.show_mnist_example(MNISTimgs[1242])
-plotting.show_mnist_example(reconstruction(MNISTimgs[1242], ts))
+plotting.image_show(MNISTimgs[1242])
+plotting.image_show(reconstruction(MNISTimgs[1242], ts))
 
 
 import nets, flax, pickle
@@ -79,7 +79,7 @@ import nets, flax, pickle
 lenet = nets.LeNet5()
 lenet_param_path = "params/lenet_MNIST_B256_N10000.pkl"
 with open(lenet_param_path, 'rb') as f:
-    lenet_params = lenet.init(key, MNIST[:2]['image'])
+    lenet_params = lenet.init(key, MNIST[:2]['x'])
     lenet_params = flax.serialization.from_bytes(lenet_params, pickle.load(f))
 
 # MLP classifier

@@ -61,9 +61,9 @@ neg_predictor = logistic.negation_logistic_estimator(params0, linear)
 
 
 #G = logistic.G_function(traj_params, linear, logistic.constant_estimator(1.), logistic.cross_entropy, partial(logistic.l1_reg, C = 0., x0 = x0), betaG)
-#G = logistic.G_function(traj_params, linear, logistic.constant_estimator(0.5), logistic.square_cost, partial(logistic.l2_reg, C = 0., x0 = x0), betaG)
+G = logistic.G_function(traj_params, linear, logistic.constant_estimator(0.5), logistic.square_cost, partial(logistic.l1_reg, C = 0., x0 = x0), betaG)
 #G = logistic.G_function(traj_params, linear, neg_predictor, logistic.cross_entropy, partial(logistic.l2_reg, C = 0., x0 = x0), betaG)
-G = logistic.G_function(traj_params, linear, neg_predictor, logistic.cross_entropy, partial(logistic.l1_reg, C = 1., x0 = x0), betaG)
+#G = logistic.G_function(traj_params, linear, neg_predictor, logistic.cross_entropy, partial(logistic.l1_reg, C = 1., x0 = x0), betaG)
 hypsG = G, jax.grad(G), etaG, 0., 1.
 
 _, traj_x = langevin.MALA_chain(state_x, hypsG, N_x)
