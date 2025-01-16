@@ -103,7 +103,11 @@ def summary_plots(factual, counterfactual_df: pd.DataFrame,
         # Manually set the color for each x-tick
         for tick, color in zip(axes[j].xaxis.get_major_ticks(), tick_colors):
             tick.label1.set_color(color)
-
+            
+        # Add gridlines to the background
+        axes[j].grid(axis="y", linestyle="--", alpha=0.7)  # Add gridlines to the y-axis
+        
+        
         axes[j].set_title(f"{feature.title()} Distribution", fontsize=12, fontweight='bold')
         axes[j].set_ylabel("Percentage", fontsize=10)
         axes[j].set_xlabel(feature.title(), fontsize=10)

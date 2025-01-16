@@ -99,8 +99,8 @@ indices = jnp.array([0, 1, 2])
 
 # New values for these indices
 new_values_lower = jnp.array([0.2, 0.3, 0.4])
-new_values_upper = jnp.array([0.32,0.48,0.5])
-
+new_values_upper = jnp.array([0.32,0.48,0.5])      # tight clipping
+#new_values_upper = jnp.array([0.32,0.48,0.5])*1.5  # loose clipping
 
 lower_bound = jnp.zeros_like(xs).at[indices].set(new_values_lower)
 upper_bound = jnp.ones_like(xs).at[indices].set(new_values_upper)
