@@ -38,6 +38,14 @@ def create_params_from_array(w: jax.Array, b: jax.Array):
     Given a weight vector w and a bias scalar b for a linear model
     Returns the PyTreee of parameters in the same form as an single layer MLP
     """
+    # Ensure weights are in the expected shape for Dense
+    w = w.reshape(-1, 1)  # Flatten to (n_features,)
+    # Convert bias to a scalar if needed
+    if isinstance(b, jnp.ndarray) and b.shape == (1,):
+        b = b[0]  # Extract scalar from array
+    elif isinstance(b, jnp.ndarray) and b.ndim == 0:
+        b = b.item()  # Convert scalar JAX array to Python scalar
+        
     return {'params':{'Dense_0':{'kernel':w, 'bias':b}}}
     
 def _bias_to_zero_fn(key_path, value):

@@ -19,11 +19,11 @@ from datasets import load_dataset, Features, Array3D, Dataset
 
 
 def _standardize_image_pixels(example):
-    example["x"] = example['x']/255.0  
+    example["image"] = example['image']/255.0  
     return example
 
 def _expand_channel_dim(example):
-    example['x'] = jnp.expand_dims(example['x'], axis = -1)
+    example['image'] = jnp.expand_dims(example['image'], axis = -1)
     return example
 
 def get_MNIST(
@@ -31,19 +31,18 @@ def get_MNIST(
     color_channel   : bool = True   # whether to add the color channel (trivially)
     ) -> Dataset:
     """
-    Returns a Dataset object with two columns, 'x', and 'y' containing image and label.
-    'x' is a float jax.Array of shape (N, 28, 28, 1) with values in [0,1]
-    and 'y' column is an int jax.Array of shape (N,) with values 0,...,9
+    Returns a Dataset object with two columns, 'image', and 'label'.
+    'image' is a float jax.Array of shape (N, 28, 28, 1) with values in [0,1]
+    and 'label' column is an int jax.Array of shape (N,) with values 0,...,9
     where N = 60k or 10k depending on whether the 'train' or 'test' split is taken.
     """
     MNIST = load_dataset("mnist", split = split)
-    MNIST = MNIST.rename_columns({'image':'x', 'label':'y'})
     MNIST.set_format('numpy')
     MNIST = MNIST.map(_standardize_image_pixels)
 
     if color_channel:
         MNIST = MNIST.map(_expand_channel_dim)
-        features = Features({**MNIST.features, 'x':Array3D(dtype = 'float32', shape = (28,28,1)) })
+        features = Features({**MNIST.features, 'image':Array3D(dtype = 'float32', shape = (28,28,1)) })
 
     nothing= lambda x : x
     MNIST = MNIST.map(nothing, features = features)
@@ -52,75 +51,28 @@ def get_MNIST(
     return MNIST
 
 def get_CIFAR(
-    split   : str       #'test' or 'train'
+    split   : str,          #'test' or 'train'
     ) -> Dataset:
     """
-    Returns a Dataset objet with two columns, 'x' and 'y'.
-    'x' column is a float jax.Array of shape (N, 32, 32, 3)
-    and 'y' column is an int jax.Array of shape (N,) where
+    Returns a Dataset objet with two columns, 'image' and 'label'.
+    'image' column is a float jax.Array of shape (N, 32, 32, 3)
+    and 'label' column is an int jax.Array of shape (N,) where
     N = 50k or 10k depending on whether 'train' or 'test' split is taken. 
     Labels are integers between 0 and 9 (inclusive).
     """
     CIFAR = load_dataset("cifar10", split=split)
-    CIFAR = CIFAR.rename_columns({"img":"x", "label":"y"})
+    CIFAR = CIFAR.rename_column("img", "image")
 
     CIFAR.set_format("numpy")
     CIFAR = CIFAR.map(_standardize_image_pixels)
     
     # explicitly declaring the type of data at each row is critical for performance.
-    features = Features({**CIFAR.features, 'x':Array3D(dtype = 'float32', shape=(32,32,3))})
+    features = Features({**CIFAR.features, 'image':Array3D(dtype = 'float32', shape=(32,32,3))})
     nothing = lambda x : x
     CIFAR = CIFAR.map(nothing, features = features)
     
     CIFAR.set_format("jax")
     return CIFAR
-
-def get_CIFAR100(
-    split   : str,                      # 'test' or 'train'
-    labels  : str   = 'fine_label'      # 'fine_label' or 'course_label'
-    ) -> Dataset:
-    """
-    Returns the CIFAR100 dataset
-    """
-    CIFAR = load_dataset('cifar100', split = split)
-    columns = ['fine_label', 'coarse_label']
-    columns.remove(labels)
-    CIFAR = CIFAR.remove_columns(columns)
-    CIFAR = CIFAR.rename_columns({'img':'x', labels:'y'})
-
-    CIFAR.set_format("numpy")
-    CIFAR = CIFAR.map(_standardize_image_pixels)
-
-    features = Features({**CIFAR.features, 'x': Array3D(dtype='float32', shape = (32,32,3))})
-    nothing = lambda x: x
-    CIFAR = CIFAR.map(nothing, features = features)
-
-    CIFAR.set_format("jax")
-    return CIFAR
-
-
-def get_TinyImageNet(
-    split   : str   # 'train' or 'test' (equivalently 'valid')
-    ) -> Dataset:
-    """
-    Returns the Tiny Image Net dataset
-    """
-    if split == 'test':
-        split = 'valid'
-    TIN = load_dataset('Maysee/tiny-imagenet', split=split)
-    TIN = TIN.rename_columns({'image':'x', 'label':'y'})
-
-    TIN.set_format("numpy")
-    TIN = TIN.map(_standardize_image_pixels)
-    
-    # explicitly declaring the type of data at each row is critical for performance.
-    features = Features({**TIN.features, 'x':Array3D(dtype = 'float32', shape=(64,64,3))})
-    nothing = lambda x : x
-    TIN = TIN.map(nothing, features = features)
-    
-    TIN.set_format("jax")
-    return TIN
-
 
 
 ############################
@@ -138,7 +90,8 @@ import utils
 file_paths = {
     'adult': 'data/adult.csv',
     'gmsc' : 'data/GiveMeSomeCredit.csv',
-    'fico' : 'data/FICO_dataset.csv'
+    'fico' : 'data/FICO_dataset.csv',
+    'housing' : 'data/housing.csv'    
     }
 
 def _check_file_paths(file_paths):
@@ -206,8 +159,24 @@ _workclass_dict = {
     'Never-worked': 'others' #too little in number 
     }
 
-
+_relationship_dict = {
+    'Husband': 'married',
+    'Not-in-family': 'no-family',
+    'Other-relative': 'other-relative',
+    'Own-child': 'Own-child',
+    'Unmarried': 'unmarried',
+    'Wife': 'married'
+    }
     
+def get_dict():
+    """
+    Returns the dictionaries for region, workclass, and relationship mappings.
+    
+    Returns:
+        tuple: (_region_dict, _workclass_dict, _relationship_dict)
+    """
+    return _region_dict, _workclass_dict, _relationship_dict
+
 def get_adult():
 
     df = pd.read_csv(file_paths['adult'], na_values = '?')
@@ -227,9 +196,17 @@ def get_adult():
         ('consolidate', workclass_consolidator),
     ])
     
+    relationship_consolidator = FunctionTransformer(utils.fn_from_dict(_relationship_dict))
+    relationship_transformer = Pipeline(steps =[
+        ('imputer', SimpleImputer(strategy = 'most_frequent')),
+        ('consolidate', relationship_consolidator),
+    ])
+    
+    
     occupation_transformer = Pipeline(steps=[
         ('imputer', utils.WeightedImputer()),
     ])
+    
     region_consolidator = FunctionTransformer(utils.fn_from_dict(_region_dict))
     country_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy = 'most_frequent')),
@@ -239,6 +216,7 @@ def get_adult():
     #irreversible proprocessing
     irrev = ColumnTransformer(transformers=[
         ('wrk', workclass_transformer, ['workclass']),
+        ('rlt', relationship_transformer, ['relationship']),
         ('occ', occupation_transformer, ['occupation']),
         ('nat', country_transformer, ['native-country'])
         ],
@@ -248,7 +226,7 @@ def get_adult():
 
     # imputed and consolidated dataframe
     imp_and_cons = irrev.fit_transform(df)
-    transformed_cols = ['workclass', 'occupation', 'native-country']
+    transformed_cols = ['workclass', 'relationship', 'occupation', 'native-country']
     untouched_cols = df.columns.drop(transformed_cols)
     reordered_cols = np.concatenate([transformed_cols, untouched_cols])
     imp_and_cons_df = pd.DataFrame(imp_and_cons, columns = reordered_cols)
@@ -270,7 +248,7 @@ def get_adult():
         ('scaler', numerical_scaler)
         ]) 
     categorical_transformer = Pipeline(steps=[
-        ('one_hot', OneHotEncoder(sparse_output=False))   # 5 + 2 + 7 + 3 + 14 + 7 + 6 = 44 classes
+        ('one_hot', OneHotEncoder(sparse_output=False, handle_unknown='ignore'))   # 5 + 2 + 7 + 3 + 14 + 7 + 6 = 44 classes
     ])
     
     
@@ -383,6 +361,45 @@ def get_fico():
     X = scaler.fit_transform(X)
     
     return df, X, y, scaler
+
+
+##################
+## Housing
+##################
+
+def get_housing():
+    
+    df = pd.read_csv(file_paths['housing'])
+    
+    # Replace categorical values 
+    df['mainroad'] = df['mainroad'].replace({'yes': 1, 'no': 0})
+    df['guestroom'] = df['guestroom'].replace({'yes': 1, 'no': 0})
+    df['basement'] = df['basement'].replace({'yes': 1, 'no': 0})
+    df['hotwaterheating'] = df['hotwaterheating'].replace({'yes': 1, 'no': 0})
+    df['airconditioning'] = df['airconditioning'].replace({'yes': 1, 'no': 0})
+    df['prefarea'] = df['prefarea'].replace({'yes': 1, 'no': 0})
+    df['furnishingstatus'] = df['furnishingstatus'].replace({
+        'unfurnished': 0, 
+        'semi-furnished': 1, 
+        'furnished': 2
+        })
+    
+    X = df.drop(columns = 'price')
+    y = df.price
+    
+    # Initialize the scaler
+    scaler = MinMaxScaler()
+    X = scaler.fit_transform(X)
+    
+    scaler_y = MinMaxScaler()
+    y = np.reshape(y, (-1,1))
+    y = scaler_y.fit_transform(y)
+                               
+    
+    return df, X, y, scaler, scaler_y
+
+
+
 
 
 #############################
