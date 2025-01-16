@@ -16,6 +16,8 @@ import nets, train, optax, utils
 import logistic, langevin
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pandas as pd
+
 
 def G_contrast_function(lin_reg, svr_model, beta):
     w = jnp.array(lin_reg.coef_)  # Shape: (n_features,)
@@ -210,4 +212,52 @@ def feature_comparison_boxplots(similar_data, different_data, feature_names, tit
     plt.tight_layout()
     plt.show()
 
+def compare_datasets(original, inverted, categorical_cols=None, numerical_cols=None):
+    """
+    Compare the original dataset with the inverted dataset.
+
+    Parameters:
+    - original (pd.DataFrame): The original dataset.
+    - inverted (pd.DataFrame): The inverted dataset.
+    - categorical_cols (list): List of categorical column names.
+    - numerical_cols (list): List of numerical column names.
+    """
+    # Replace inf values with NaN
+    original = original.replace([np.inf, -np.inf], np.nan)
+    inverted = inverted.replace([np.inf, -np.inf], np.nan)
+
+    # Drop rows with NaN values to avoid plotting issues
+    original = original.dropna()
+    inverted = inverted.dropna()
+
+    # Determine columns if not provided
+    if categorical_cols is None:
+        categorical_cols = original.select_dtypes(include=['object', 'category']).columns.tolist()
+    if numerical_cols is None:
+        numerical_cols = original.select_dtypes(include=['number']).columns.tolist()
+    
+    # Compare numerical features
+    for col in numerical_cols:
+        plt.figure(figsize=(10, 6))
+        sns.kdeplot(original[col], label='Original', fill=True, color='blue')
+        sns.kdeplot(inverted[col], label='Synthetic', fill=True, color='orange')
+        plt.title(f'Distribution of {col}')
+        plt.xlabel(col)
+        plt.ylabel('Density')
+        plt.legend()
+        plt.show()
+
+    # Compare categorical features
+    for col in categorical_cols:
+        plt.figure(figsize=(10, 6))
+        original_counts = original[col].value_counts(normalize=True)
+        inverted_counts = inverted[col].value_counts(normalize=True)
+        comparison_df = pd.DataFrame({'Original': original_counts, 'Synthetic': inverted_counts})
+        comparison_df.plot(kind='bar', figsize=(10, 6), color=['blue', 'orange'])
+        plt.title(f'Comparison of {col}')
+        plt.ylabel('Proportion')
+        plt.xlabel(col)
+        plt.xticks(rotation=45)
+        plt.legend()
+        plt.show()
 
