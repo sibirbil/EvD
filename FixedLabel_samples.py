@@ -25,14 +25,16 @@ adult, preprocessor, df  = create_datasets.get_adult()  # check the output signa
 
 adult_train, adult_test = train_test_split(adult, test_size = 0.1, random_state= 1826)
 
-# Reset the index of the training dataset
-adult_train.reset_index(drop=False, inplace=True)  # Creates a new index column based on row positions
-adult_train = adult_train.drop(columns=['index'])
+# Keep the original index in the training and test datasets
+adult_train = adult_train.reset_index(drop=False)  # 'index' column now holds original indices
+adult_test = adult_test.reset_index(drop=False)
 
-X_train = jnp.array(adult_train.drop(columns = 'income').to_numpy())
+
+# Remove the index column when creating X_train and X_test
+X_train = jnp.array(adult_train.drop(columns=['index', 'income']).to_numpy())
 y_train = jnp.array(adult_train['income'].to_numpy())
 
-X_test = jnp.array(adult_test.drop(columns = 'income').to_numpy())
+X_test = jnp.array(adult_test.drop(columns=['index', 'income']).to_numpy())
 y_test = jnp.array(adult_test['income'].to_numpy())
 
 # Write the linnear model as a 1 layer single output neural network.
@@ -82,66 +84,70 @@ etaG = 0.01/betaG
 etaG = utils.sqrt_decay(etaG)
 N_x = 5000
 
-x_b = X_train[499]  
-xs = X_train[499]  
-state_x = key, x_b
 
-#neg_predictor = logistic.negation_logistic_estimator(params0, linear)
+factual_info = summarize_results.read_sample("factual.csv")
 
-
-G = logistic.G_function(traj_params, linear, logistic.constant_estimator(1.), logistic.cross_entropy, partial(logistic.l2_reg, C = 0.01, x0 = xs), betaG)
-#G = logistic.G_function(traj_params, linear, neg_predictor, logistic.cross_entropy, partial(logistic.l2_reg, C = 0., x0 = x0), betaG)
-
-#lower_bound = jnp.zeros_like(xs)
-#upper_bound = jnp.ones_like(xs)
-
-indices = jnp.array([0, 1, 2])
-
-# New values for these indices
-new_values_lower = jnp.array([0.2, 0.3, 0.4])
-new_values_upper = jnp.array([0.32,0.48,0.5])      # tight clipping
-#new_values_upper = jnp.array([0.32,0.48,0.5])*1.5  # loose clipping
-
-lower_bound = jnp.zeros_like(xs).at[indices].set(new_values_lower)
-upper_bound = jnp.ones_like(xs).at[indices].set(new_values_upper)
+# Loop through each record
+for _, row in factual_info.iterrows():
+    
+    original_index = row["original_index"]
+    record_index = adult_train[adult_train['index'] == original_index].index[0]
+    #lower_bound = jnp.zeros_like(xs)
+    #upper_bound = jnp.ones_like(xs)
+    lower_bounds = jnp.array(row["lower_bounds"])
+    upper_bounds = jnp.array(row["upper_bounds"])  # tight clipping    
+    #upper_bounds = upper_bounds *1.5  # loose clipping
+    
+    x_b = X_train[record_index]  
+    xs = X_train[record_index]  
+    state_x = key, x_b
+    
+    #neg_predictor = logistic.negation_logistic_estimator(params0, linear)
 
 
-hypsG = G, jax.grad(G), etaG, lower_bound, upper_bound 
+    G = logistic.G_function(
+        traj_params, linear, logistic.constant_estimator(1.),
+        logistic.cross_entropy, partial(logistic.l2_reg, C = 0.01, x0 = xs),
+        betaG)
+    #G = logistic.G_function(traj_params, linear, neg_predictor, logistic.cross_entropy, partial(logistic.l2_reg, C = 0., x0 = x0), betaG)
 
-_, traj_x = langevin.MALA_chain(state_x, hypsG, N_x)
+    indices = jnp.array([0, 1, 2])  # Modify as needed
+    lower_bound = jnp.zeros_like(xs).at[indices].set(lower_bounds)
+    upper_bound = jnp.ones_like(xs).at[indices].set(upper_bounds)
 
-a = jax.vmap(G)(traj_x)/betaG
-print(f"x trajectory quality max: {jnp.max(a)}, min:{jnp.min(a)}, mean:{jnp.mean(a)}, std:{jnp.std(a)}")
+    hypsG = G, jax.grad(G), etaG, lower_bound, upper_bound 
 
-ys = log_reg.predict(traj_x)
-data_path = jnp.column_stack([traj_x, ys])
-data_path_df = pd.DataFrame(data_path, columns= adult.columns)
-inverted = create_datasets.invert_adult(data_path_df, preprocessor)
+    _, traj_x = langevin.MALA_chain(state_x, hypsG, N_x)
 
+    ys = log_reg.predict(traj_x)
+    data_path = jnp.column_stack([traj_x, ys])
+    data_path_df = pd.DataFrame(data_path, columns= adult.columns)
+    inverted = create_datasets.invert_adult(data_path_df, preprocessor)
+    
+    # summarize_results.visualize_samples(inverted[-500:])
 
-# summarize_results.visualize_samples(inverted[-500:])
-
-# Define features
-numerical_features = ["age", "educational-num", "hours-per-week"]
-categorical_features = ["race", "gender", "native-country", "workclass", "occupation", "relationship"]
-
-# Plot
-factual = df.iloc[7209].to_dict()
-
-# Get the dictionaries
-region_dict, workclass_dict, relationship_dict = create_datasets.get_dict()
-
-# Update 'factual' using the dictionaries
-if "native-country" in factual:
-    factual["native-country"] = region_dict.get(factual["native-country"], factual["native-country"])
-if "workclass" in factual:
-    factual["workclass"] = workclass_dict.get(factual["workclass"], factual["workclass"])
-if "relationship" in factual:
-    factual["relationship"] = relationship_dict.get(factual["relationship"], factual["relationship"])
+    # Define features
+    numerical_features = ["age", "educational-num", "hours-per-week"]
+    categorical_features = ["race", "gender", "native-country", "workclass", "occupation", "relationship"]
 
 
-summarize_results.summary_plots(factual , inverted[-500:],  
-                               numerical_features=numerical_features, 
-                               categorical_features=categorical_features)
+    # Prepare factual data
+    factual = df.iloc[original_index].to_dict()
+    
+    # Get the dictionaries
+    region_dict, workclass_dict, relationship_dict = create_datasets.get_dict()
+
+    # Update 'factual' using the dictionaries
+    factual["native-country"] = region_dict.get(factual.get("native-country"), factual.get("native-country"))
+    factual["workclass"] = workclass_dict.get(factual.get("workclass"), factual.get("workclass"))
+    factual["relationship"] = relationship_dict.get(factual.get("relationship"), factual.get("relationship"))
+
+
+    # Plot the results for the current record
+    summarize_results.summary_plots(factual, inverted[-500:],  
+                                    numerical_features=numerical_features, 
+                                    categorical_features=categorical_features)
+
+    print(f"Processed record index: {record_index}")
 
 

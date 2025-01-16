@@ -3,6 +3,28 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List
+import ast
+
+
+
+def read_sample(file_path):
+    """
+    Read the sample index and the bounds from a CSV file
+    Returns:
+        pd.DataFrame: DataFrame with 'record_index', 'lower_bounds', and 'upper_bounds'
+    """
+    
+    sample_info = pd.read_csv(file_path)
+    
+    # Convert string representation of lists to actual lists
+    sample_info["lower_bounds"] = sample_info["lower_bounds"].apply(ast.literal_eval)
+    sample_info["upper_bounds"] = sample_info["upper_bounds"].apply(ast.literal_eval)
+    
+    return sample_info
+
+
+
+
 
 def summary_plots(factual, counterfactual_df: pd.DataFrame,  
                                    numerical_features: List[str], categorical_features: List[str]):
