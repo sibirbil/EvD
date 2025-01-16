@@ -161,10 +161,10 @@ def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label):
     ax.set_xticklabels(labels, rotation=45, ha="right")
 
     legend_handles = [
-        Patch(facecolor="blue", edgecolor="black", label="Dataset 1"),
-        Patch(facecolor="green", edgecolor="black", label="Dataset 2")
+        Patch(facecolor="blue", edgecolor="black", label="Synthetic Data"),
+        Patch(facecolor="green", edgecolor="black", label="Original Test Data")
     ]
-    ax.legend(handles=legend_handles, loc="upper right")
+    ax.legend(handles=legend_handles, loc="upper left")
 
     plt.tight_layout()
     plt.show()

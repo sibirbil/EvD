@@ -125,7 +125,7 @@ model_contrast_functions.scatter_plot_with_reference(
 # Box plot to compare features
 model_contrast_functions.side_by_side_boxplots(
     data1=synt_data_cnt,
-    data2=synt_data_sml,
+    data2=X_test,    # or synt_data_sml?
     labels=df.columns[1:],
     title="Feature Comparison Between Datasets",
     x_label="Features",
