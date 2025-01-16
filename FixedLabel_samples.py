@@ -51,7 +51,7 @@ params0 = logistic.create_params_from_array(w.T,b)
 
 
 ########################################################
-# This part is to search for some counterfactuals to test
+# This part is to search for some factuals to test
 ########################################################
 """
 adult_train['predictions'] = log_reg.predict(X_train)
@@ -85,9 +85,10 @@ etaG = utils.sqrt_decay(etaG)
 N_x = 5000
 
 
+# factual.csv includes some samples for test
 factual_info = summarize_results.read_sample("factual.csv")
 
-# Loop through each record
+# loop through each factual record
 for _, row in factual_info.iterrows():
     
     original_index = row["original_index"]
@@ -126,11 +127,6 @@ for _, row in factual_info.iterrows():
     
     # summarize_results.visualize_samples(inverted[-500:])
 
-    # Define features
-    numerical_features = ["age", "educational-num", "hours-per-week"]
-    categorical_features = ["race", "gender", "native-country", "workclass", "occupation", "relationship"]
-
-
     # Prepare factual data
     factual = df.iloc[original_index].to_dict()
     
@@ -142,8 +138,11 @@ for _, row in factual_info.iterrows():
     factual["workclass"] = workclass_dict.get(factual.get("workclass"), factual.get("workclass"))
     factual["relationship"] = relationship_dict.get(factual.get("relationship"), factual.get("relationship"))
 
+    numerical_features = ["age", "educational-num", "hours-per-week"]
+    categorical_features = ["race", "gender", "native-country", "workclass", "occupation", "relationship"]
 
-    # Plot the results for the current record
+
+    # plot the results for the current record
     summarize_results.summary_plots(factual, inverted[-500:],  
                                     numerical_features=numerical_features, 
                                     categorical_features=categorical_features)
