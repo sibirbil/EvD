@@ -354,8 +354,18 @@ def remove_outliers(df, column_name, iqr_multiplier = 2):
 def get_fico():
     
     df = pd.read_csv(file_paths['fico'])
-    X = df.drop(columns = 'RiskPerformance')
-    y = df.RiskPerformance.replace(to_replace=['Bad', 'Good'], value=[1, 0])
+    # Replace -9, -8, and -7 with NaN
+    df = df.applymap(lambda x: np.nan if x in [-9, -8, -7] else x)
+    missing_percentage = df.isna().mean() * 100
+    columns_to_drop = missing_percentage[missing_percentage > 25].index
+    df_cleaned = df.drop(columns=columns_to_drop)
+    
+    X = df_cleaned.drop(columns = 'RiskPerformance')
+    y = df_cleaned.RiskPerformance.replace(to_replace=['Bad', 'Good'], value=[1, 0])
+    
+    imputer = SimpleImputer(strategy='median')
+    X = pd.DataFrame(imputer.fit_transform(X), columns=X.columns)
+
     # Initialize the scaler
     scaler = MinMaxScaler()
     X = scaler.fit_transform(X)
