@@ -359,6 +359,7 @@ def get_fico():
     missing_percentage = df.isna().mean() * 100
     columns_to_drop = missing_percentage[missing_percentage > 25].index
     df_cleaned = df.drop(columns=columns_to_drop)
+    df_cleaned = df_cleaned.drop_duplicates()
     
     X = df_cleaned.drop(columns = 'RiskPerformance')
     y = df_cleaned.RiskPerformance.replace(to_replace=['Bad', 'Good'], value=[1, 0])
