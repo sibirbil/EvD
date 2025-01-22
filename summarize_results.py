@@ -44,16 +44,20 @@ def summary_plots(factual, counterfactual_df: pd.DataFrame,
     # Create a grid for all 9 plots (3x3)
     total_features = len(numerical_features) + len(categorical_features)
     rows = (total_features // 3) + (1 if total_features % 3 != 0 else 0)
-    fig, axes = plt.subplots(rows, 3, figsize=(18, 5 * rows), constrained_layout=True)
+    fig, axes = plt.subplots(rows, 3, figsize=(18, 5 * rows), constrained_layout=False)
     axes = axes.flatten()
+    
+    # Adjust spacing between subplots
+    fig.subplots_adjust(hspace=0.4, wspace=0.3)
 
     # Plot Numerical Features
     for i, feature in enumerate(numerical_features):
         sns.kdeplot(counterfactual_df[feature], fill=True, alpha=0.5, color= cnt_color, label='Counterfactuals', ax=axes[i])
         axes[i].axvline(factual[feature], color= factual_color, linestyle='--', label=f'Factual ({factual[feature]})')
-        axes[i].set_title(f"{feature.replace('-', ' ').title()} Distribution")
-        axes[i].set_xlabel(feature.replace('-', ' ').title())
-        axes[i].set_ylabel('Density')
+        axes[i].set_title(f"{feature.replace('-', ' ').title()} Distribution", fontsize = 16, fontweight='bold')
+        axes[i].set_xlabel(feature.replace('-', ' ').title(), fontsize = 15)
+        axes[i].set_ylabel('Density', fontsize = 15)
+        axes[i].tick_params(axis="both", which="major", labelsize=14)
         # Swap legend order
         handles, labels = axes[i].get_legend_handles_labels()
         axes[i].legend(handles=[handles[1], handles[0]], labels=[labels[1], labels[0]])
@@ -67,7 +71,7 @@ def summary_plots(factual, counterfactual_df: pd.DataFrame,
             handles=[handles[1], handles[0]],  # Swap factual and counterfactual order
             labels=[labels[1], labels[0]],
             loc="upper left",  # Move legend to the left
-            fontsize=9,
+            fontsize=14,
             frameon=True,
             fancybox=True,
             framealpha=0.7  # Add transparency to the legend background
@@ -102,7 +106,7 @@ def summary_plots(factual, counterfactual_df: pd.DataFrame,
             axes[j].bar([0], percentages.values, color=cnt_color, alpha=0.7, width=0.2)
             axes[j].set_xticks([0])
             axes[j].set_xlim(-0.5, 0.5)
-            axes[j].set_xticklabels(percentages.index)
+            axes[j].set_xticklabels(percentages.index, fontsize = 14)
         else:
             axes[j].bar(percentages.index, percentages.values, color=cnt_color, alpha=0.7, width=0.5)
 
@@ -120,7 +124,7 @@ def summary_plots(factual, counterfactual_df: pd.DataFrame,
 
         # Update the x-tick labels
         axes[j].set_xticks(range(len(percentages.index)))
-        axes[j].set_xticklabels(xtick_labels, fontsize=10, rotation=45)
+        axes[j].set_xticklabels(xtick_labels, fontsize=14)
 
         # Manually set the color for each x-tick
         for tick, color in zip(axes[j].xaxis.get_major_ticks(), tick_colors):
@@ -130,16 +134,16 @@ def summary_plots(factual, counterfactual_df: pd.DataFrame,
         axes[j].grid(axis="y", linestyle="--", alpha=0.7)  # Add gridlines to the y-axis
         
         
-        axes[j].set_title(f"{feature.title()} Distribution", fontsize=12, fontweight='bold')
-        axes[j].set_ylabel("Percentage", fontsize=10)
-        axes[j].set_xlabel(feature.title(), fontsize=10)
-        axes[j].tick_params(axis="both", which="major", labelsize=9)
+        axes[j].set_title(f"{feature.title()} Distribution", fontsize=16, fontweight='bold')
+        axes[j].set_ylabel("Percentage", fontsize=15)
+        axes[j].set_xlabel(feature.title(), fontsize=15)
+        axes[j].tick_params(axis="both", which="major", labelsize=14)
 
 
         # Add legend for factual and counterfactuals
         factual_patch = plt.Line2D([0], [0], color=factual_color, lw=4, label=f'Factual ({factual_value})')
         counterfactual_patch = plt.Line2D([0], [0], color=cnt_color, lw=4, label='Counterfactuals')
-        axes[j].legend(handles=[factual_patch, counterfactual_patch], loc="upper left", fontsize = 9)
+        axes[j].legend(handles=[factual_patch, counterfactual_patch], loc="upper left", fontsize = 14)
 
     # Remove unused axes if any
     for k in range(len(numerical_features) + len(categorical_features), len(axes)):

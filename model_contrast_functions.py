@@ -92,7 +92,7 @@ def print_max_min_values(data, labels, dataset_name):
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
-def scatter_plot_with_reference(x, y, x_label, y_label, title, color="blue", alpha=0.6):
+def scatter_plot_with_reference(x, y, x_label, y_label, title, color="blue", alpha=0.6, font_size = 14):
     """Plots a scatter plot with a reference y=x line."""
     plt.figure(figsize=(8, 6))
     plt.scatter(x, y, alpha=alpha, color=color)
@@ -101,13 +101,16 @@ def scatter_plot_with_reference(x, y, x_label, y_label, title, color="blue", alp
     max_val = max(x.max(), y.max())
     plt.plot([min_val, max_val], [min_val, max_val], color="red", linestyle="--", label="Agreement")
 
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.title(title)
-    plt.legend()
+    plt.xlabel(x_label, fontsize=font_size+2)
+    plt.ylabel(y_label, fontsize=font_size+2)
+    plt.title(title, fontsize=font_size)
+    plt.legend(fontsize=font_size)
     plt.grid(alpha=0.3)
     plt.tight_layout()
     plt.show()
+    
+    
+    
 
 def boxplot_comparison(data, labels, title, y_label):
     
@@ -120,7 +123,7 @@ def boxplot_comparison(data, labels, title, y_label):
     plt.tight_layout()
     plt.show()
 
-def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label):
+def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label, font_size=14):
     """Creates side-by-side boxplots for comparing two datasets"""
     
     data1 = np.array(data1)
@@ -155,18 +158,22 @@ def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label):
         showmeans=True,
         meanprops=dict(marker='o', markerfacecolor='green', markeredgecolor='green')
     )
+    
+    # Set y-limit (increased but hidden)
+    ax.set_ylim(0, 1.2)  # Set the y-limit to 1.2
 
-    ax.set_title(title)
-    ax.set_xlabel(x_label)
-    ax.set_ylabel(y_label)
+    
+    ax.set_title(title, fontsize = font_size)
+    ax.set_xlabel(x_label, fontsize = font_size + 2)
+    ax.set_ylabel(y_label, fontsize = font_size + 2)
     ax.set_xticks(positions)
-    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_xticklabels(labels, rotation=60, ha="right", fontsize = font_size + 2)
 
     legend_handles = [
-        Patch(facecolor="blue", edgecolor="black", label="Synthetic Data"),
+        Patch(facecolor="blue", edgecolor="black", label="Generated Samples"),
         Patch(facecolor="green", edgecolor="black", label="Original Test Data")
     ]
-    ax.legend(handles=legend_handles, loc="upper left")
+    ax.legend(handles=legend_handles, loc="upper left", fontsize = font_size-1)
 
     plt.tight_layout()
     plt.show()

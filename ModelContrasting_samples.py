@@ -119,7 +119,8 @@ model_contrast_functions.scatter_plot_with_reference(
     y_label="SVR Predictions",
     title="Scatter Plot of Linear Regression vs SVR Predictions for Model Contrast",
     color="blue",
-    alpha=0.6
+    alpha=0.6,
+    font_size=16
 ) 
 
 # Box plot to compare features
@@ -129,7 +130,8 @@ model_contrast_functions.side_by_side_boxplots(
     labels=df.columns[1:],
     title="Feature Comparison Between Datasets",
     x_label="Features",
-    y_label="Values"
+    y_label="Values",
+    font_size=16
 )
 
 
@@ -141,5 +143,6 @@ model_contrast_functions.scatter_plot_with_reference(
     y_label="SVR Predictions",
     title="Scatter Plot of Linear Regression vs SVR Predictions on the Test Data",
     color="blue",
-    alpha=0.6
+    alpha=0.6,
+    font_size=16
 )
