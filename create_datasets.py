@@ -12,18 +12,18 @@ import numpy as np
 # We load data from Huggingface, they are of Dict or Dataset type
 # with 'color' channel added in if it doesn't exist. Values are
 # standardized to be in [0,1]. Labels are integers (not one-hot).
-# The column names are 'image' and 'label'
+# The column names are 'x' and 'y' for image and label.
 
 
 from datasets import load_dataset, Features, Array3D, Dataset
 
 
 def _standardize_image_pixels(example):
-    example["image"] = example['image']/255.0  
+    example["x"] = example['x']/255.0  
     return example
 
 def _expand_channel_dim(example):
-    example['image'] = jnp.expand_dims(example['image'], axis = -1)
+    example['x'] = jnp.expand_dims(example['x'], axis = -1)
     return example
 
 def get_MNIST(
@@ -31,18 +31,19 @@ def get_MNIST(
     color_channel   : bool = True   # whether to add the color channel (trivially)
     ) -> Dataset:
     """
-    Returns a Dataset object with two columns, 'image', and 'label'.
-    'image' is a float jax.Array of shape (N, 28, 28, 1) with values in [0,1]
-    and 'label' column is an int jax.Array of shape (N,) with values 0,...,9
+    Returns a Dataset object with two columns, 'x', and 'y' containing imge and label.
+    'x' is a float jax.Array of shape (N, 28, 28, 1) with values in [0,1]
+    and 'y' column is an int jax.Array of shape (N,) with values 0,...,9
     where N = 60k or 10k depending on whether the 'train' or 'test' split is taken.
     """
     MNIST = load_dataset("mnist", split = split)
+    MNIST = MNIST.rename_columns({'image':'x', 'label':'y'})
     MNIST.set_format('numpy')
     MNIST = MNIST.map(_standardize_image_pixels)
 
     if color_channel:
         MNIST = MNIST.map(_expand_channel_dim)
-        features = Features({**MNIST.features, 'image':Array3D(dtype = 'float32', shape = (28,28,1)) })
+        features = Features({**MNIST.features, 'x':Array3D(dtype = 'float32', shape = (28,28,1)) })
 
     nothing= lambda x : x
     MNIST = MNIST.map(nothing, features = features)
@@ -51,29 +52,70 @@ def get_MNIST(
     return MNIST
 
 def get_CIFAR(
-    split   : str,          #'test' or 'train'
+    split   : str           #'test' or 'train'
     ) -> Dataset:
     """
-    Returns a Dataset objet with two columns, 'image' and 'label'.
-    'image' column is a float jax.Array of shape (N, 32, 32, 3)
-    and 'label' column is an int jax.Array of shape (N,) where
+    Returns a Dataset objet with two columns, 'x' and 'y'.
+    'x' column is a float jax.Array of shape (N, 32, 32, 3)
+    and 'y' column is an int jax.Array of shape (N,) where
     N = 50k or 10k depending on whether 'train' or 'test' split is taken. 
     Labels are integers between 0 and 9 (inclusive).
     """
     CIFAR = load_dataset("cifar10", split=split)
-    CIFAR = CIFAR.rename_column("img", "image")
+    CIFAR = CIFAR.rename_columns({"img":"x", "label":"y"})
 
     CIFAR.set_format("numpy")
     CIFAR = CIFAR.map(_standardize_image_pixels)
     
     # explicitly declaring the type of data at each row is critical for performance.
-    features = Features({**CIFAR.features, 'image':Array3D(dtype = 'float32', shape=(32,32,3))})
+    features = Features({**CIFAR.features, 'x':Array3D(dtype = 'float32', shape=(32,32,3))})
     nothing = lambda x : x
     CIFAR = CIFAR.map(nothing, features = features)
     
     CIFAR.set_format("jax")
     return CIFAR
 
+
+def get_CIFAR100(
+    split   : str,                      # 'test' or 'train'
+    labels  : str   = 'fine_label'      # 'fine_label' or 'course_label'
+    ) -> Dataset:
+    """
+    Returns the CIFAR100 dataset
+    """
+    CIFAR = load_dataset('cifar100', split = split)
+    columns = ['fine_label', 'coarse_label']
+    columns.remove(labels)
+    CIFAR = CIFAR.remove_columns(columns)   #only labels remains
+    CIFAR = CIFAR.rename_columns({'img':'x', labels:'y'})
+    CIFAR.set_format("numpy")
+    CIFAR = CIFAR.map(_standardize_image_pixels)
+    features = Features({**CIFAR.features, 'x': Array3D(dtype='float32', shape = (32,32,3))})
+    nothing = lambda x: x
+    CIFAR = CIFAR.map(nothing, features = features)
+    CIFAR.set_format("jax")
+    return CIFAR
+
+def get_TinyImageNet(
+    split   : str   # 'train' or 'test' (equivalently 'valid')
+    ) -> Dataset:
+    """
+    Returns the Tiny Image Net dataset
+    """
+    if split == 'test':
+        split = 'valid'
+    TIN = load_dataset('Maysee/tiny-imagenet', split=split)
+    TIN = TIN.rename_columns({'image':'x', 'label':'y'})
+    TIN.set_format("numpy")
+    TIN = TIN.map(_standardize_image_pixels)
+    
+    # explicitly declaring the type of data at each row is critical for performance.
+    features = Features({**TIN.features, 'x':Array3D(dtype = 'float32', shape=(64,64,3))})
+    nothing = lambda x : x
+    TIN = TIN.map(nothing, features = features)
+    
+    TIN.set_format("jax")
+    return TIN
 
 ############################
 ####    TABULAR DATA    ####
