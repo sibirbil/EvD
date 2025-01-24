@@ -94,5 +94,5 @@ model_contrast_functions.print_max_min_values(original_data.to_numpy(), original
 
 
 # Compare datasets
-# model_contrast_functions.compare_datasets(original=original_data, inverted=inverted_df)
+model_contrast_functions.compare_datasets(original=original_data, inverted=inverted_df)
 

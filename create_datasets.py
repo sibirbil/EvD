@@ -413,7 +413,7 @@ def get_fico():
     scaler = MinMaxScaler()
     X = scaler.fit_transform(X)
     
-    return df, X, y, scaler
+    return df_cleaned, X, y, scaler
 
 
 ##################
