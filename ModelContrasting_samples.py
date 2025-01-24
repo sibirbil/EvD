@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
-
 df, X, y, scaler_X, scaler_y = create_datasets.get_housing()
 key = random.key(42)
 init_key, dropout_key, train_key, mala_key, x0_key = random.split(key, 5)
@@ -71,20 +70,6 @@ print(f"Test R2: {r2_score(y_test, lin_test_preds):.4f}")
 
 beta = 1000.
 eta = 0.01/beta
-G_sml = model_contrast_functions.G_similar_function(lin_reg, svr_model, beta)
-gradG_sml = jax.grad(G_sml)
-
-hypsG_sml = G_sml, gradG_sml, eta, 0.0, 1.0
-x0 = jax.random.uniform(x0_key, X.shape[1])
-state_x = mala_key, x0
-
-_, traj_x_sml = langevin.MALA_chain(state_x, hypsG_sml, 5000)
-synt_data_sml = traj_x_sml[-500:]
-linear_preds_sml = lin_reg.predict(synt_data_sml)
-svr_preds_sml = svr_model.predict(synt_data_sml)
-inverted_ln_y_sml = scaler_y.inverse_transform(np.reshape(linear_preds_sml, (-1,1)))
-inverted_svr_y_sml = scaler_y.inverse_transform(np.reshape(svr_preds_sml, (-1,1)))
-
 
 G_cnt = model_contrast_functions.G_contrast_function(lin_reg, svr_model, beta)
 gradG_cnt = jax.grad(G_cnt)

@@ -43,33 +43,8 @@ def G_contrast_function(lin_reg, svr_model, beta):
         y2 = jnp.dot(w_svr, x) + b_svr
 
         # Compute contrastive loss
-        diff = (y1 - y2)*1
+        diff = (y1 - y2)
         return beta * jnp.exp(-jnp.linalg.norm(diff) ** 2)
-    
-    return G
-
-def G_similar_function(lin_reg, svr_model, beta):
-    w = jnp.array(lin_reg.coef_)  # Shape: (n_features,)
-    b = jnp.array(lin_reg.intercept_)  # Shape: ()
-    
-    # Extract support vectors, dual coefficients, and intercept
-    support_vectors = svr_model.support_vectors_
-    dual_coefs = svr_model.dual_coef_.flatten()  
-    b_svr = svr_model.intercept_[0]             
-
-    # Compute the weight vector (w)
-    w_svr = np.dot(dual_coefs, support_vectors)
-
-    def G(x):
-        # Linear regression prediction
-        y1 = jnp.dot(w, x) + b  # Linear regression output
-
-        # SVR prediction
-        y2 = jnp.dot(w_svr, x) + b_svr
-
-        # Compute contrastive loss
-        diff = y1 - y2
-        return beta * jnp.linalg.norm(diff) ** 2
     
     return G
 
