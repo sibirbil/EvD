@@ -178,8 +178,8 @@ test_noised_logits = jax.vmap(mlp.apply, in_axes = (0, None, None))(noised_param
 test_noised_preds = jnp.argmax(test_noised_logits, axis = -1)
 test_persistence = jnp.mean((test_noised_preds == test_preds), axis = 0)  #shape (N_test,)
 
-G_risky = G_function_risky(traj_params, jnp.array([1,1]), mlp, betaG)
-hypsG_risky = G_risky, jax.grad(G_risky), etaG
+G_risky = G_function_risky(traj_params, jnp.array([0.5, 0.5]), mlp, betaG)
+hypsG_risky = G_risky, jax.grad(G_risky), etaG, 0., 1.
 _, risky_traj_x = langevin.MALA_chain(x_state, hypsG_risky, N_data)
 
 
