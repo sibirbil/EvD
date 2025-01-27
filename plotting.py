@@ -1,7 +1,11 @@
 from matplotlib import pyplot as plt
+import seaborn as sns
+
 import jax.numpy as jnp
 import jax
 import numpy as np
+import pandas as pd
+from typing import Tuple, Sequence
 
 def plot_1D_trajectory_histogram(trajectory, bins=50):
     plt.figure(figsize=(8, 6))
@@ -151,3 +155,63 @@ def time_series(array1 : jax.Array, array2 = None, array3 = None, array4 = None)
     plt.legend()
     plt.grid(True)
     plt.show()
+
+
+def feature_comparison_histograms(
+    dfs     : Sequence[pd.DataFrame], 
+    n_cols  : int                  = 4, 
+    figsize : Tuple[int]           = (15, 15), 
+    labels  : list[str]| None      = None
+    ):
+    """
+    Plot histograms for each feature to up do 4 dataframes.
+    
+    Parameters:
+    -----------
+    dfi : pandas.DataFrame
+        Dataframe containing features
+    n_cols : int, default=3
+        Number of columns in the subplot grid
+    figsize : tuple, default=(15, 15)
+        Figure size (width, height)
+    labels : list, default=['Dataset 1', 'Dataset 2']
+        Labels for the datasets in the legend
+        
+    Returns:
+    --------
+    fig : matplotlib.figure.Figure
+        The figure containing all subplots
+    """
+    labels = [f'Dataset_{i}' for i in range(1, len(dfs) + 1)] if labels is None else labels        
+    features = dfs[0].columns
+    n_features = len(features)
+    n_rows = (n_features + n_cols - 1) // n_cols
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    fig.suptitle('Feature Distributions', fontsize=16)
+    
+    # Flatten axes array for easier iteration
+    axes = axes.flatten()
+    
+    for idx, feature in enumerate(features):
+        ax = axes[idx]
+        
+        # Plot datasets
+        for (i, dfi) in enumerate(dfs):
+            sns.histplot(data=dfi, x=feature, alpha=0.5, label=labels[i], stat = 'density', ax=ax, bins = 100)
+        
+
+        ax.set_title(f'{feature}')
+        ax.legend()
+        
+        # Rotate x-axis labels if they're too long
+        if max([len(str(label)) for label in ax.get_xticklabels()]) > 10:
+            ax.tick_params(axis='x', rotation=45)
+    
+    # Remove empty subplots
+    for idx in range(n_features, len(axes)):
+        fig.delaxes(axes[idx])
+    
+    plt.tight_layout()
+    return fig
+

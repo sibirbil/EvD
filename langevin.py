@@ -126,6 +126,25 @@ def MALA_chain(state, hyps, NSteps):
     return (last_key, last_x), x_traj
 
 
+# I will now try to implement MALA without using any scan function,
+# which will hopefully work with non-jax Tracer compatible functions.
+# It will probably be slower.
+
+def nt_MALA(state, hyps, Nsteps):
+    func, grad_func, eta, *clip_to = (*hyps, None, None)[:5]
+    eta = as_scheduler(eta)
+    key, x = state
+    
+    output = []
+    for iStep in range(Nsteps):
+        lr = eta(iStep)
+        new_hyps = (func,grad_func, lr, *clip_to)
+        key, next_x = MALA_step((key, x), new_hyps) 
+        output.append(next_x)
+    
+    return (key, next_x), jax.tree.map(lambda *xs: jnp.stack(xs), *output)
+     
+
 ######################################################
 # Below is an earlier version which only works with  #
 # jax.Array's and not PyTree's. Parameters of neural #

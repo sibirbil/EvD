@@ -2,13 +2,11 @@ import jax
 import optax
 import jax.numpy as jnp
 import jax.random as random
-from create_datasets import get_MNIST
-from datasets import Dataset
-from nets import MLP, cross_entropy_loss
 from functools import partial
 
-from collections import namedtuple
-from typing import NamedTuple, Callable
+from typing import NamedTuple, Callable, Tuple, TypeAlias
+from jaxtyping import PyTree, Array
+
 
 
 key = random.PRNGKey(0)
@@ -24,6 +22,7 @@ Hyps = NamedTuple(
         ('scale', float)            # scaling factor for the base distribution
     ]
     )
+
 
 def create_tree(x, tree):
     """
@@ -41,17 +40,22 @@ def keys_tree(key, tree):
     keys_tree = jax.tree_unflatten(treedef, keys)
     return keys_tree
 
-def gaussian_samples_tree(key, means, stdev, nSamples = 1):
+def gaussian_samples(
+    key         : Array, 
+    means       : PyTree, 
+    stdevs      : PyTree,  # assumed to have the same structure as means
+    nSamples    : int = 1
+    ):
     """
-    Returns a PyTree where jax.Array leaves. The shape of arrays at leaves
-    is identical to those of means, except for one extra leading dimension
-    with length = nSamples. This bundles all Gaussian samples into single PyTree.
-    stdev is expected to be a PyTree with same structure as means, but can 
-    be a scalar, in which case same same standard deviation is used for all
-    entries of all arrays at all leaves. 
+    Returns a PyTree where jax.Array leaves. Can also be a single jax.Array,
+    which is also considered as a PyTree with a single node. 
+    Returns a Pytree with tree structure identical to those of means, with 
+    jax.Array leaves with the same shape except for one extra leading dimension
+    with length = nSamples. 
+    This bundles all Gaussian samples into single PyTree. 
+    Same standard deviation is used for all entries of all arrays at all leaves. 
     """
-    stdevs = create_tree(stdev, means)
-    keys = keys_tree(key, means) #structured as a tree
+    keys = keys_tree(key, means) #different key at each leaf, structured as a tree
     noises = jax.tree.map(
         lambda l, k: jax.random.normal(k, (nSamples, *l.shape), l.dtype), 
         means, 
@@ -63,6 +67,13 @@ def gaussian_samples_tree(key, means, stdev, nSamples = 1):
         stdevs,
         noises
     ) 
+
+def gaussian_single_std_samples(key :random.PRNGKey, means :PyTree, stdev : float, nSamples :int = 1):
+    """
+    same as gaussian_samples, with same standard deviation used for all entries of all leaves.
+    """
+    stdevs = create_tree(stdev, means)
+    return gaussian_samples(key, means, stdevs, nSamples)
 
 @partial(jax.jit, static_argnames = ('func', 'nSamples'))
 def noisy_vals(
@@ -82,13 +93,13 @@ def noisy_vals(
     
     Returns an array of outputs of func with leading dimension of size nSamples.
     """
-    noises = gaussian_samples_tree(key, means, stdevs, nSamples)
+    noises = gaussian_samples(key, means, stdevs, nSamples)
     return jax.vmap(func)(noises)
 
 
 
 @partial(jax.jit, static_argnums=1)
-def vi_step(state, hyps: Hyps, step):
+def vi_step(state, hyps: Hyps, step : int):
     key, x0= state
     key, subkey = random.split(key)
     grads = noisy_vals(key, hyps.grad_func, x0, hyps.scale, hyps.nSamples)
