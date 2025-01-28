@@ -194,35 +194,51 @@ def feature_comparison_boxplots(similar_data, different_data, feature_names, tit
     plt.tight_layout()
     plt.show()
 
-def compare_datasets(original, inverted, categorical_cols=None, numerical_cols=None):
+def compare_datasets(data1, data2, categorical_cols=None, numerical_cols=None, labels=None):
     """
-    Compare the original dataset with the inverted dataset.
+    Compare two datasets.
 
     Parameters:
-    - original (pd.DataFrame): The original dataset.
-    - inverted (pd.DataFrame): The inverted dataset.
+    - data1 (pd.DataFrame): The first dataset.
+    - data2 (pd.DataFrame): The second dataset.
     - categorical_cols (list): List of categorical column names.
     - numerical_cols (list): List of numerical column names.
+    - labels (tuple): A tuple containing labels for the datasets (label_data1, label_data2).
     """
+    
+    # Default labels if not provided
+    if labels is None:
+        labels = ('Data1', 'Data2')
+    label_data1, label_data2 = labels
+
+    # Set global font sizes
+    plt.rc('font', size=14)          # Default text size
+    plt.rc('axes', titlesize=16)     # Title size
+    plt.rc('axes', labelsize=14)     # X and Y label size
+    plt.rc('xtick', labelsize=13)    # X-axis tick size
+    plt.rc('ytick', labelsize=13)    # Y-axis tick size
+    plt.rc('legend', fontsize=14)    # Legend font size
+    plt.rc('figure', titlesize=16)   # Figure title size
+    
     # Replace inf values with NaN
-    original = original.replace([np.inf, -np.inf], np.nan)
-    inverted = inverted.replace([np.inf, -np.inf], np.nan)
+    data1 = data1.replace([np.inf, -np.inf], np.nan)
+    data2 = data2.replace([np.inf, -np.inf], np.nan)
 
     # Drop rows with NaN values to avoid plotting issues
-    original = original.dropna()
-    inverted = inverted.dropna()
+    data1 = data1.dropna()
+    data2 = data2.dropna()
 
     # Determine columns if not provided
     if categorical_cols is None:
-        categorical_cols = original.select_dtypes(include=['object', 'category']).columns.tolist()
+        categorical_cols = data1.select_dtypes(include=['object', 'category']).columns.tolist()
     if numerical_cols is None:
-        numerical_cols = original.select_dtypes(include=['number']).columns.tolist()
+        numerical_cols = data1.select_dtypes(include=['number']).columns.tolist()
     
     # Compare numerical features
     for col in numerical_cols:
         plt.figure(figsize=(10, 6))
-        sns.kdeplot(original[col], label='Original', fill=True, color='blue')
-        sns.kdeplot(inverted[col], label='Synthetic', fill=True, color='orange')
+        sns.kdeplot(data1[col], label=label_data1, fill=True, color='blue')
+        sns.kdeplot(data2[col], label=label_data2, fill=True, color='orange')
         plt.title(f'Distribution of {col}')
         plt.xlabel(col)
         plt.ylabel('Density')
@@ -232,9 +248,9 @@ def compare_datasets(original, inverted, categorical_cols=None, numerical_cols=N
     # Compare categorical features
     for col in categorical_cols:
         plt.figure(figsize=(10, 6))
-        original_counts = original[col].value_counts(normalize=True)
-        inverted_counts = inverted[col].value_counts(normalize=True)
-        comparison_df = pd.DataFrame({'Original': original_counts, 'Synthetic': inverted_counts})
+        data1_counts = data1[col].value_counts(normalize=True)
+        data2_counts = data2[col].value_counts(normalize=True)
+        comparison_df = pd.DataFrame({label_data1: data1_counts, label_data2: data2_counts})
         comparison_df.plot(kind='bar', figsize=(10, 6), color=['blue', 'orange'])
         plt.title(f'Comparison of {col}')
         plt.ylabel('Proportion')
@@ -242,4 +258,3 @@ def compare_datasets(original, inverted, categorical_cols=None, numerical_cols=N
         plt.xticks(rotation=45)
         plt.legend()
         plt.show()
-

@@ -198,7 +198,7 @@ test_noised_logits = jax.vmap(mlp.apply, in_axes = (0, None, None))(noised_param
 test_noised_preds = jnp.argmax(test_noised_logits, axis = -1)
 test_persistence = jnp.mean((test_noised_preds == test_preds), axis = 0)  #shape (N_test,)
 
-G_risky = G_function_risky(traj_params, jnp.array([0.5, 0.5]), mlp, betaG)
+G_risky = G_function_risky(traj_params, jnp.array([1.0, 1.0]), mlp, betaG)
 hypsG_risky = G_risky, jax.grad(G_risky), etaG, 0., 1.
 _, risky_traj_x = langevin.MALA_chain(x_state, hypsG_risky, N_data)
 
@@ -223,3 +223,13 @@ import plotting
 figure = plotting.feature_comparison_histograms([generated_noised_df, generated_risky_df],
                                                 labels = ['generated_noised', 'generated_risky'])
 figure.show()
+
+
+import model_contrast_functions
+
+model_contrast_functions.compare_datasets(
+    data1=generated_noised_df[-500:],
+    data2=generated_risky_df[-500:],
+    labels=('Generated Sensitive', 'Generated Risky')
+)
+
