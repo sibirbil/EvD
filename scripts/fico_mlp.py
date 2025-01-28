@@ -4,6 +4,8 @@ import jax.random as random
 import optax
 import pandas as pd
 from functools import partial
+import pickle
+import flax.serialization
 import flax.linen as nn
 from xgboost import XGBClassifier
 
@@ -13,13 +15,14 @@ import train
 import datasets
 import langevin
 import vi_opt
+import os
 
 
 df, X, y, scaler = create_datasets.get_fico()
 
 N = X.shape[0]
 key = random.key(24)
-init_key, train_key, mala_key, noise_key, x0_key = random.split(key, 5)
+init_key, train_key, mala_key, noise_key, dropout_key, x0_key = random.split(key, 6)
 
 
 ## Get the data in JAX format
@@ -39,18 +42,35 @@ ds_test = ds_test.with_format('jax')
 
 ## Define the MLP network with dropout and train it.
 
-mlp = nets.MLP_with_dropout(features = [128,32,8,2], dropout_rate=0.2)
+features = [128,32,8,2]
+dropout_rate = 0.2
+TrainBatchSize = 128
+N_train = 10_000
+mlp = nets.MLP_with_dropout(features = features, dropout_rate=dropout_rate)
 exp_decay_schedule = optax.schedules.exponential_decay(0.01,100, 0.9,500, True, end_value = 1e-5)
 adam = optax.adam(learning_rate = exp_decay_schedule)
-ts = train.create_train_state(init_key, mlp, X_train[0].shape, adam)
-ts = train.train(train_key,ts, ds_train, 128, 10000)
-test_acc, test_loss = train.eval_step(ts, ds_test[:])
+
+model_path = 'params/fico_mlp_' + ('-'.join(map(str, features))) + '_B' +str(TrainBatchSize) + '_N' + str(N_train) + '.pkl'
+
+if os.path.exists(model_path):
+    # load the parameters from file
+    with open(model_path, 'rb') as f:
+        params = mlp.init(init_key, X_train)
+        params = flax.serialization.from_bytes(params, pickle.load(f))
+        ts = train.TrainState.create(apply_fn = mlp.apply, params = params, rng_key = dropout_key, tx = adam)
+
+else:
+    ts = train.create_train_state(init_key, mlp, X_train[0].shape, adam)
+    ts = train.train(train_key,ts, ds_train, TrainBatchSize, N_train)
+    test_acc, test_loss = train.eval_step(ts, ds_test[:])
+    with open(model_path, 'wb') as f:
+        pickle.dump(flax.serialization.to_bytes(ts.params), f)
 
 print(f"The accuracy on the test set {test_acc} with loss {test_loss}")
 
 # we add a bit of noise to the parameters
 N_noise = 1000
-noise_std = 0.01
+noise_std = 0.05
 noised_params = vi_opt.gaussian_single_std_samples(noise_key, ts.params, noise_std, N_noise)
 
 ## score of a single set of params on a given dataset
@@ -78,8 +98,8 @@ def F_function(
 
 
 betaF = 1000.
-etaF = 0.1/betaF
-N_params = 10
+etaF = 0.01/betaF
+N_params = 1000
 params_state = mala_key, ts.params
 F = F_function(ds_train['x'], ds_train['y'], mlp, betaF)
 hypsF = F, jax.grad(F), etaF
@@ -200,6 +220,6 @@ print(f"the std of noise {noise_traj_prob_std} and risky samples are {risky_traj
 
 import plotting
 
-figure = plotting.feature_comparison_histograms([generated_noised_df, generated_risky_df, test0_df, test1_df],
-                                                labels = ['generated_noised', 'generated_risky', 'test_with_label0', 'test_with_label1'])
+figure = plotting.feature_comparison_histograms([generated_noised_df, generated_risky_df],
+                                                labels = ['generated_noised', 'generated_risky'])
 figure.show()
