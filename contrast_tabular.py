@@ -126,4 +126,14 @@ import pandas as pd
 #The disagreeing data
 traj_readable = pd.DataFrame(data, columns = colnames)
 
+import model_contrast_functions
+
+model_contrast_functions.compare_datasets_grid(
+    data1=X_train,
+    data2=traj_readable[-500:],
+    numerical_cols=['AverageMInFile', 'NumTotalTrades', 'MSinceMostRecentTradeOpen', 'NumInqLast6M'],
+    labels=('Training Data', 'Generated Data')
+    )
+
+
 

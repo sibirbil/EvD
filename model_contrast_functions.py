@@ -258,3 +258,65 @@ def compare_datasets(data1, data2, categorical_cols=None, numerical_cols=None, l
         plt.xticks(rotation=45)
         plt.legend()
         plt.show()
+        
+        
+def compare_datasets_grid(data1, data2, numerical_cols=None, labels=None):
+     """
+     Compare two datasets and generate KDE plots in a grid format
+
+     Parameters:
+     - data1 (pd.DataFrame): The first dataset
+     - data2 (pd.DataFrame): The second dataset
+     - numerical_cols (list): column names
+     - labels (tuple): A tuple containing labels for the datasets (label_data1, label_data2)
+     """
+     
+     # Default labels if not provided
+     if labels is None:
+         labels = ('Generated Sensitive', 'Generated Risky')
+     label_data1, label_data2 = labels
+
+     # Set global font sizes
+     plt.rc('font', size=13)
+     plt.rc('axes', titlesize=16)
+     plt.rc('axes', labelsize=14)
+     plt.rc('xtick', labelsize=13)
+     plt.rc('ytick', labelsize=13)
+     plt.rc('legend', fontsize=13)
+     plt.rc('figure', titlesize=16)
+     
+     # Replace inf values with NaN and drop NaNs
+     data1 = data1.replace([np.inf, -np.inf], np.nan).dropna()
+     data2 = data2.replace([np.inf, -np.inf], np.nan).dropna()
+
+     # Determine numerical columns if not provided
+     if numerical_cols is None:
+         numerical_cols = data1.select_dtypes(include=['number']).columns.tolist()
+     
+     # Set up subplot grid
+     num_plots = len(numerical_cols)
+     cols = 2  # Number of columns in the grid
+     rows = (num_plots // cols) + (num_plots % cols > 0)  # Calculate rows dynamically
+     
+     fig, axes = plt.subplots(rows, cols, figsize=(12, 8))
+     axes = axes.flatten()  # Flatten to easily iterate
+
+     # Iterate through numerical columns and create KDE plots
+     for i, col in enumerate(numerical_cols):
+         sns.kdeplot(data1[col], label=label_data1, fill=True, color='#8A9A5B', ax=axes[i])
+         sns.kdeplot(data2[col], label=label_data2, fill=True, color='darkorange', ax=axes[i])
+         axes[i].set_title(f'Distribution of {col}')
+         axes[i].set_xlabel(col)
+         axes[i].set_ylabel('Density')
+         axes[i].legend(loc='upper left', frameon=True, fancybox=True)
+
+     # Remove any unused subplots
+     for j in range(i + 1, len(axes)):
+         fig.delaxes(axes[j])
+
+     plt.tight_layout()
+     plt.show()         
+        
+        
+        
+        
