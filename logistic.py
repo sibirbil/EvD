@@ -32,6 +32,15 @@ def create_train_state_from_params(
     ):
     return TrainState.create(apply_fn= model.apply, params = params, tx = optimizer)
 
+def create_params_from_array2(w: jax.Array, b: jax.Array):
+    """
+    Given a weight vector w and a bias scalar b for a linear model
+    Returns the PyTreee of parameters in the same form as an single layer MLP
+    """
+    # Ensure weights are in the expected shape for Dense
+    w = w.reshape(-1, 1)  # Flatten to (n_features,)
+        
+    return {'params':{'Dense_0':{'kernel':w, 'bias':b}}}
 
 def create_params_from_array(w: jax.Array, b: jax.Array):
     """

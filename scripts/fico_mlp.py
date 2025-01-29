@@ -139,21 +139,7 @@ def G_function_sensitive(
     return jax.jit(G)
 
 
-clsfr = XGBClassifier(
-    subsample=0.6, 
-    reg_lambda=5, 
-    reg_alpha=10, 
-    n_estimators=200, 
-    min_child_weight=1, 
-    max_depth=8, 
-    learning_rate=0.05, 
-    gamma=1, 
-    colsample_bytetree=0.5
-    )
-clsfr.fit(X_train, y_train)
-print(f"The xgboost classifier has score \
-      {clsfr.score(X_train, y_train)} on training set \
-      and {clsfr.score(X_test, y_test)} on test set.")
+
 
 betaG = 100.
 etaG = 0.01/betaG

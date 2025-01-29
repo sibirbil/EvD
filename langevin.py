@@ -139,10 +139,11 @@ def nt_MALA(state, hyps, Nsteps):
     for iStep in range(Nsteps):
         lr = eta(iStep)
         new_hyps = (func,grad_func, lr, *clip_to)
-        key, next_x = MALA_step((key, x), new_hyps) 
-        output.append(next_x)
+        key, x = MALA_step((key, x), new_hyps) 
+        output.append(x)
+
     
-    return (key, next_x), jax.tree.map(lambda *xs: jnp.stack(xs), *output)
+    return (key, x), jax.tree.map(lambda *xs: jnp.stack(xs), *output)
      
 
 ######################################################
