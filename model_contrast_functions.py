@@ -14,7 +14,6 @@ import numpy as np
 import nets, train, optax, utils
 
 import logistic, langevin
-import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
@@ -60,7 +59,7 @@ def print_max_min_values(data, labels, dataset_name):
 
 
 ##################
-### Visualisations
+### Visualizations
 ##################
 
 
@@ -85,8 +84,6 @@ def scatter_plot_with_reference(x, y, x_label, y_label, title, color="blue", alp
     plt.show()
     
     
-    
-
 def boxplot_comparison(data, labels, title, y_label):
     
     plt.figure(figsize=(8, 6))
@@ -116,10 +113,10 @@ def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label, font_si
         positions=positions - width / 2,
         widths=width,
         patch_artist=True,
-        boxprops=dict(facecolor="blue", alpha=0.6),
+        boxprops=dict(facecolor="#6B8E23", alpha=0.8),
         medianprops=dict(color="black"),
         showmeans=True,
-        meanprops=dict(marker='o', markerfacecolor='blue', markeredgecolor='blue')
+        meanprops=dict(marker='o', markerfacecolor='darkgreen', markeredgecolor='darkgreen')
     )
 
     # Plot boxplots for the second dataset
@@ -128,14 +125,15 @@ def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label, font_si
         positions=positions + width / 2,
         widths=width,
         patch_artist=True,
-        boxprops=dict(facecolor="green", alpha=0.6),
+        boxprops=dict(facecolor="#4682B4", alpha=0.8),
         medianprops=dict(color="black"),
         showmeans=True,
-        meanprops=dict(marker='o', markerfacecolor='green', markeredgecolor='green')
+        meanprops=dict(marker='o', markerfacecolor='#4169E1', markeredgecolor='#4169E1')
     )
     
     # Set y-limit (increased but hidden)
     ax.set_ylim(0, 1.2)  # Set the y-limit to 1.2
+    ax.set_yticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])  # Only display these ticks
 
     
     ax.set_title(title, fontsize = font_size)
@@ -145,8 +143,8 @@ def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label, font_si
     ax.set_xticklabels(labels, rotation=60, ha="right", fontsize = font_size + 2)
 
     legend_handles = [
-        Patch(facecolor="blue", edgecolor="black", label="Generated Samples"),
-        Patch(facecolor="green", edgecolor="black", label="Original Test Data")
+        Patch(facecolor="#4682B4", edgecolor="black", label="Test Data"),
+        Patch(facecolor="#6B8E23", edgecolor="black", label="Generated Samples")
     ]
     ax.legend(handles=legend_handles, loc="upper left", fontsize = font_size-1)
 
@@ -156,7 +154,7 @@ def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label, font_si
 
 
 def feature_comparison_boxplots(similar_data, different_data, feature_names, title):
-    """Creates feature-wise boxplots comparing similar and different prediction datasets."""
+    """Creates feature-wise boxplots comparing similar and different prediction datasets"""
     n_features = similar_data.shape[1]
 
     plt.figure(figsize=(16, 6))
@@ -196,9 +194,8 @@ def feature_comparison_boxplots(similar_data, different_data, feature_names, tit
 
 def compare_datasets(data1, data2, categorical_cols=None, numerical_cols=None, labels=None):
     """
-    Compare two datasets.
+    Compare two datasets
 
-    Parameters:
     - data1 (pd.DataFrame): The first dataset.
     - data2 (pd.DataFrame): The second dataset.
     - categorical_cols (list): List of categorical column names.
@@ -237,12 +234,12 @@ def compare_datasets(data1, data2, categorical_cols=None, numerical_cols=None, l
     # Compare numerical features
     for col in numerical_cols:
         plt.figure(figsize=(10, 6))
-        sns.kdeplot(data1[col], label=label_data1, fill=True, color='blue')
-        sns.kdeplot(data2[col], label=label_data2, fill=True, color='orange')
+        sns.kdeplot(data1[col], label=label_data1, fill=True, color='#8A9A5B')
+        sns.kdeplot(data2[col], label=label_data2, fill=True, color='darkorange')
         plt.title(f'Distribution of {col}')
         plt.xlabel(col)
         plt.ylabel('Density')
-        plt.legend()
+        plt.legend(loc='upper left', frameon=True, fancybox=True)
         plt.show()
 
     # Compare categorical features
@@ -259,7 +256,7 @@ def compare_datasets(data1, data2, categorical_cols=None, numerical_cols=None, l
         plt.legend()
         plt.show()
         
-        
+              
 def compare_datasets_grid(data1, data2, numerical_cols=None, labels=None):
      """
      Compare two datasets and generate KDE plots in a grid format
@@ -317,6 +314,132 @@ def compare_datasets_grid(data1, data2, numerical_cols=None, labels=None):
      plt.tight_layout()
      plt.show()         
         
+     
         
+def compare_datasets_gridAll(data1, data2, categorical_cols=None, numerical_cols=None, labels=None):
+    """
+    Compare the original dataset with the inverted dataset using a grid layout
+
+    Parameters:
+    - data1
+    - data2
+    - categorical_cols (list, optional): List of categorical column names
+    - numerical_cols (list, optional): List of numerical column names
+    - labels (tuple, optional): A tuple containing labels for the datasets (label_original, label_inverted)
+    """
+
+    # Default labels if not provided
+    if labels is None:
+        labels = ('Original Data', 'Generated Samples')
+    label_original, label_inverted = labels
+
+    # Set global font sizes
+    plt.rc('font', size=12)          
+    plt.rc('axes', titlesize=14)     
+    plt.rc('axes', labelsize=12)     
+    plt.rc('xtick', labelsize=11)    
+    plt.rc('ytick', labelsize=12)    
+    plt.rc('legend', fontsize=12)    
+    plt.rc('figure', titlesize=14)   
+    
+    # Replace inf values with NaN and drop NaNs
+    data1 = data1.replace([np.inf, -np.inf], np.nan).dropna()
+    data2 = data2.replace([np.inf, -np.inf], np.nan).dropna()
+        
+    # Determine columns if not provided
+    if categorical_cols is None:
+        categorical_cols = data1.select_dtypes(include=['object', 'category']).columns.tolist()
+    if numerical_cols is None:
+        numerical_cols = data1.select_dtypes(include=['number']).columns.tolist()
+
+    # Select first 20 features (numerical + categorical) to match the 4x5 grid
+    selected_features = numerical_cols[:20] if len(numerical_cols) >= 20 else numerical_cols + categorical_cols[:20-len(numerical_cols)]
+    
+    # Define grid layout: 5 rows × 4 columns
+    fig, axes = plt.subplots(nrows=5, ncols=4, figsize=(20, 20))
+    axes = axes.flatten()  # Flatten the 2D grid for easy iteration
+
+    # Store plot handles for legend
+    handles, labels = [], []
+
+    for i, col in enumerate(selected_features):
+        ax = axes[i]  # Select subplot
+        
+        if col in numerical_cols:
+            # KDE Plot for Numerical Features
+            sns.kdeplot(data1[col], label=label_original, fill=True, color='#8A9A5B', ax=ax)
+            sns.kdeplot(data2[col], label=label_inverted, fill=True, color='darkorange', ax=ax)
+            ax.set_title(f'Distribution of {col}')
+            ax.set_xlabel(col)
+            ax.set_ylabel('Density')
+        else:
+            # Bar Plot for Categorical Features
+            original_counts = data1[col].value_counts(normalize=True)
+            inverted_counts = data2[col].value_counts(normalize=True)
+            comparison_df = pd.DataFrame({label_original: original_counts, label_inverted: inverted_counts})
+            comparison_df.plot(kind='bar', ax=ax, color=['#8A9A5B', 'orange'])
+            ax.set_title(f'Comparison of {col}')
+            ax.set_ylabel('Proportion')
+            ax.set_xlabel(col)
+            ax.set_xticklabels(comparison_df.index, rotation=45)
+
+        # Capture legend handles once for use in global legend
+        if i == 0:  
+            handles, labels = ax.get_legend_handles_labels()
+        ax.legend().remove()  # Remove legend from individual plots
+
+    # Add a global legend below the plots
+    fig.legend(handles, labels, loc='lower center', ncol=2, fontsize=14, frameon=False)
+    plt.tight_layout(rect=[0, 0.03, 1, 1])  # Adjust layout to make space for legend
+
+    plt.show()
+    
+    
+def scatter_zoom(lin_test_preds, svr_test_preds, linear_preds_cnt, svr_preds_cnt):
+    # Define figure and main axes
+    fig, ax_main = plt.subplots(figsize=(8, 6))
+    
+    # Scatter plot of full dataset
+    ax_main.scatter(lin_test_preds, svr_test_preds, alpha=0.7, color="#4682B4", label="Test Data")
+    ax_main.scatter(linear_preds_cnt, svr_preds_cnt, alpha=0.7, color="#6B8E23", label="Generated Samples")
+    
+    # Add reference line
+    min_val = min(lin_test_preds.min(), svr_test_preds.min(), linear_preds_cnt.min(), svr_preds_cnt.min())
+    max_val = max(lin_test_preds.max(), svr_test_preds.max(), linear_preds_cnt.max(), svr_preds_cnt.max())
+    ax_main.plot([min_val, max_val], [min_val, max_val], color="red", linestyle="--", label="Agreement")
+    
+    # Highlight region to be zoomed in
+    rect_x_min, rect_x_max = 0.48, 0.63  # Define zoomed region x limits
+    rect_y_min, rect_y_max = 0.45, 0.56  # Define zoomed region y limits
+    ax_main.add_patch(plt.Rectangle((rect_x_min, rect_y_min), rect_x_max - rect_x_min, rect_y_max - rect_y_min,
+                                    fill=False, edgecolor="black", linestyle="dashed"))
+    
+    ax_main.set_xlabel("Linear Regression Predictions", fontsize=14)
+    ax_main.set_ylabel("SVR Predictions", fontsize=14)
+    ax_main.set_title("Scatter Plot of Linear Regression vs SVR Predictions", fontsize=16)
+    ax_main.legend(fontsize=12)
+    ax_main.grid(alpha=0.3)
+    
+    # Create inset zoomed-in plot
+    ax_inset = fig.add_axes([0.58, 0.15, 0.28, 0.28])  # Define position of inset
+    ax_inset.scatter(lin_test_preds, svr_test_preds, alpha=0.7, color="#4682B4")
+    ax_inset.scatter(linear_preds_cnt, svr_preds_cnt, alpha=0.7, color="#6B8E23")
+    
+    # Set zoomed-in limits
+    x1, x2, y1, y2 = 0.48, 0.65, 0.46, 0.60  
+    ax_inset.set_xlim(x1, x2)
+    ax_inset.set_ylim(y1, y2)
+    ax_inset.grid(alpha=0.3)
+    ax_inset.set_xticks([]) 
+    ax_inset.set_yticks([]) 
+    
+    # Add reference line to inset
+    ax_inset.plot([x1, x2], [x1, x2], color="red", linestyle="--")
+    
+    # Indicate zoom region on main plot
+    ax_inset.indicate_inset_zoom(ax_inset, edgecolor="black", linestyle="dashed")
+    
+    plt.show()
+     
         
         

@@ -40,9 +40,9 @@ def langevin_step(
         clip_to = [None, None] # projects each step to the preferred interval
     ):
     """
-    Calculates the next step in Langevin dynamics for PyTree inputs.
+    Calculates the next step in Langevin dynamics for PyTree inputs
     It outputs both the new position x_next and the random noise xi added 
-    to each element, for use in calculating the acceptance ratio in MALA.
+    to each element, for use in calculating the acceptance ratio in MALA
     """
 
     # Split key to generate unique sub-keys for each leaf in the PyTree
@@ -66,7 +66,7 @@ def MALA_step(
     ):
     """
     Performs a MALA step for PyTree inputs. Proposes a new position based on Langevin dynamics 
-    and then accepts or rejects it based on the acceptance probability.
+    and then accepts or rejects it based on the acceptance probability
     """
     
     key, x = state
@@ -125,10 +125,6 @@ def MALA_chain(state, hyps, NSteps):
     (last_key, last_x, _), x_traj = jax.lax.scan(f, carry_init, None, length=NSteps)
     return (last_key, last_x), x_traj
 
-
-# I will now try to implement MALA without using any scan function,
-# which will hopefully work with non-jax Tracer compatible functions.
-# It will probably be slower.
 
 def nt_MALA(state, hyps, Nsteps):
     func, grad_func, eta, *clip_to = (*hyps, None, None)[:5]

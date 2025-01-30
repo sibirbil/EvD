@@ -96,38 +96,17 @@ inverted_svr_y_cnt = scaler_y.inverse_transform(np.reshape(svr_preds_cnt, (-1,1)
 
 ##### Visualisations ########
 
-# Scatter plot of Linear Regression vs SVR predictions
-model_contrast_functions.scatter_plot_with_reference(
-    x=linear_preds_cnt,
-    y=svr_preds_cnt,
-    x_label="Linear Regression Predictions",
-    y_label="SVR Predictions",
-    title="Scatter Plot of Linear Regression vs SVR Predictions for Model Contrast",
-    color="blue",
-    alpha=0.6,
-    font_size=16
-) 
-
 # Box plot to compare features
 model_contrast_functions.side_by_side_boxplots(
     data1=synt_data_cnt,
     data2=X_test,    # or synt_data_sml?
     labels=df.columns[1:],
-    title="Feature Comparison Between Datasets",
+    title="Feature Comparison Between the Test Data and Generated Samples",
     x_label="Features",
     y_label="Values",
     font_size=16
 )
 
+# Scatter plot
+model_contrast_functions.scatter_zoom(lin_test_preds, svr_test_preds, linear_preds_cnt, svr_preds_cnt)
 
-# Scatter plot of Linear Regression vs SVR predictions on the Test Data
-model_contrast_functions.scatter_plot_with_reference(
-    x=lin_test_preds,
-    y=svr_test_preds,
-    x_label="Linear Regression Predictions",
-    y_label="SVR Predictions",
-    title="Scatter Plot of Linear Regression vs SVR Predictions on the Test Data",
-    color="blue",
-    alpha=0.6,
-    font_size=16
-)
