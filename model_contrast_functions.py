@@ -316,16 +316,16 @@ def compare_datasets_grid(data1, data2, numerical_cols=None, labels=None):
         
      
         
-def compare_datasets_gridAll(original, inverted, categorical_cols=None, numerical_cols=None, labels=None):
+def compare_datasets_gridAll(data1, data2, categorical_cols=None, numerical_cols=None, labels=None):
     """
-    Compare the original dataset with the inverted dataset using a grid layout.
+    Compare the original dataset with the inverted dataset using a grid layout
 
     Parameters:
-    - original (pd.DataFrame): The original dataset.
-    - inverted (pd.DataFrame): The inverted dataset.
-    - categorical_cols (list, optional): List of categorical column names.
-    - numerical_cols (list, optional): List of numerical column names.
-    - labels (tuple, optional): A tuple containing labels for the datasets (label_original, label_inverted).
+    - data1
+    - data2
+    - categorical_cols (list, optional): List of categorical column names
+    - numerical_cols (list, optional): List of numerical column names
+    - labels (tuple, optional): A tuple containing labels for the datasets (label_original, label_inverted)
     """
 
     # Default labels if not provided
@@ -342,15 +342,15 @@ def compare_datasets_gridAll(original, inverted, categorical_cols=None, numerica
     plt.rc('legend', fontsize=12)    
     plt.rc('figure', titlesize=14)   
     
-    # Replace inf values with NaN and drop them
-    original = original.replace([np.inf, -np.inf], np.nan).dropna()
-    inverted = inverted.replace([np.inf, -np.inf], np.nan).dropna()
-
+    # Replace inf values with NaN and drop NaNs
+    data1 = data1.replace([np.inf, -np.inf], np.nan).dropna()
+    data2 = data2.replace([np.inf, -np.inf], np.nan).dropna()
+        
     # Determine columns if not provided
     if categorical_cols is None:
-        categorical_cols = original.select_dtypes(include=['object', 'category']).columns.tolist()
+        categorical_cols = data1.select_dtypes(include=['object', 'category']).columns.tolist()
     if numerical_cols is None:
-        numerical_cols = original.select_dtypes(include=['number']).columns.tolist()
+        numerical_cols = data1.select_dtypes(include=['number']).columns.tolist()
 
     # Select first 20 features (numerical + categorical) to match the 4x5 grid
     selected_features = numerical_cols[:20] if len(numerical_cols) >= 20 else numerical_cols + categorical_cols[:20-len(numerical_cols)]
@@ -367,15 +367,15 @@ def compare_datasets_gridAll(original, inverted, categorical_cols=None, numerica
         
         if col in numerical_cols:
             # KDE Plot for Numerical Features
-            sns.kdeplot(original[col], label=label_original, fill=True, color='#8A9A5B', ax=ax)
-            sns.kdeplot(inverted[col], label=label_inverted, fill=True, color='darkorange', ax=ax)
+            sns.kdeplot(data1[col], label=label_original, fill=True, color='#8A9A5B', ax=ax)
+            sns.kdeplot(data2[col], label=label_inverted, fill=True, color='darkorange', ax=ax)
             ax.set_title(f'Distribution of {col}')
             ax.set_xlabel(col)
             ax.set_ylabel('Density')
         else:
             # Bar Plot for Categorical Features
-            original_counts = original[col].value_counts(normalize=True)
-            inverted_counts = inverted[col].value_counts(normalize=True)
+            original_counts = data1[col].value_counts(normalize=True)
+            inverted_counts = data2[col].value_counts(normalize=True)
             comparison_df = pd.DataFrame({label_original: original_counts, label_inverted: inverted_counts})
             comparison_df.plot(kind='bar', ax=ax, color=['#8A9A5B', 'orange'])
             ax.set_title(f'Comparison of {col}')
