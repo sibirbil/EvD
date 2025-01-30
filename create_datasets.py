@@ -131,7 +131,6 @@ import utils
 
 file_paths = {
     'adult': 'data/adult.csv',
-    'gmsc' : 'data/GiveMeSomeCredit.csv',
     'fico' : 'data/FICO_dataset.csv',
     'housing' : 'data/housing.csv'    
     }
@@ -347,35 +346,6 @@ def invert_adult(processed_df, preprocessor: ColumnTransformer):
 
     return pd.concat([num_df, cat_df, inc_df], axis=1)
     
-##################
-## GMSC
-##################
-
-def get_gmsc():
-
-    df = pd.read_csv(file_paths['gmsc'])
-    iqr_multiplier = 2  # for outliers
-
-    # Impute missing values using the median for all input columns
-    imputer = SimpleImputer(strategy='median')
-    input_cols = df.columns  # All feature columns
-    df[input_cols] = imputer.fit_transform(df[input_cols])
-
-
-    # Remove outliers for relevant columns
-    df = remove_outliers(df, 'DebtRatio', iqr_multiplier)
-    df = remove_outliers(df, 'MonthlyIncome', iqr_multiplier)
-
-    # Split the dataset into features (X) and target (y)
-    y = df['SeriousDlqin2yrs']
-    X = df.drop(columns=['SeriousDlqin2yrs'])
-    
-    # Initialize the scaler
-    scaler = MinMaxScaler()
-    X = scaler.fit_transform(X)
-
-    return df, X, y, scaler
-
 
 def remove_outliers(df, column_name, iqr_multiplier = 2):
     # TODO check this iqr multiplier default value if it is too stringent
