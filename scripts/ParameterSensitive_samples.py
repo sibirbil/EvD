@@ -66,7 +66,7 @@ else:
     with open(model_path, 'wb') as f:
         pickle.dump(flax.serialization.to_bytes(ts.params), f)
 
-print(f"The accuracy on the test set {test_acc} with loss {test_loss}")
+#print(f"The accuracy on the test set {test_acc} with loss {test_loss}")
 
 # we add a bit of noise to the parameters
 N_noise = 1000
@@ -99,7 +99,7 @@ def F_function(
 
 betaF = 1000.
 etaF = 0.01/betaF
-N_params = 1000
+N_params = 10000
 params_state = mala_key, ts.params
 F = F_function(ds_train['x'], ds_train['y'], mlp, betaF)
 hypsF = F, jax.grad(F), etaF
@@ -138,8 +138,23 @@ def G_function_sensitive(
     
     return jax.jit(G)
 
-
-
+"""
+clsfr = XGBClassifier(
+    subsample=0.6, 
+    reg_lambda=5, 
+    reg_alpha=10, 
+    n_estimators=200, 
+    min_child_weight=1, 
+    max_depth=8, 
+    learning_rate=0.05, 
+    gamma=1, 
+    colsample_bytetree=0.5
+    )
+clsfr.fit(X_train, y_train)
+print(f"The xgboost classifier has score \
+      {clsfr.score(X_train, y_train)} on training set \
+      and {clsfr.score(X_test, y_test)} on test set.")
+"""
 
 betaG = 100.
 etaG = 0.01/betaG
@@ -218,4 +233,17 @@ model_contrast_functions.compare_datasets(
     data2=generated_risky_df[-500:],
     labels=('Generated Sensitive', 'Generated Risky')
 )
+
+model_contrast_functions.compare_datasets_grid(
+    data1=generated_noised_df[-500:],
+    data2=generated_risky_df[-500:],
+    numerical_cols=['AverageMInFile', 'NumTotalTrades', 'MSinceMostRecentTradeOpen', 'NumInqLast6M'])
+
+
+model_contrast_functions.compare_datasets_gridAll(
+    data1=generated_noised_df.iloc[-500:, 1:], 
+    data2=generated_risky_df.iloc[-500:, 1:],
+    labels=('Generated Sensitive', 'Generated Risky')
+    )
+
 
