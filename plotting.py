@@ -215,3 +215,47 @@ def feature_comparison_histograms(
     plt.tight_layout()
     return fig
 
+from matplotlib.gridspec import GridSpec
+
+def create_2x2_grid(images, figsize=(3.25, 3.25)):
+    """
+    Create a tight 2x2 grid of MNIST images.
+    
+    Args:
+        images: jax.Array of shape (4, 28, 28) containing MNIST images
+        figsize: Figure size in inches (default is half of double column width)
+    
+    Returns:
+        matplotlib.figure.Figure
+    """
+    assert len(images) == 4, "Exactly 4 images required"
+    
+    # Create figure with GridSpec
+    fig = plt.figure(figsize=figsize, dpi=300)
+    gs = GridSpec(2, 2, figure=fig, hspace=0.05, wspace=0.05)
+    
+    # Plot each image
+    for i in range(4):
+        row = i // 2
+        col = i % 2
+        ax = fig.add_subplot(gs[row, col])
+        
+        # Display image without interpolation for sharp pixels
+        ax.imshow(images[i], cmap='gray', interpolation='none')
+        ax.axis('off')
+        
+            
+    plt.tight_layout()
+    return fig
+
+def save_2x2_grid(images, output_path='mnist_2x2.png'):
+    """
+    Save a 2x2 grid of MNIST images.
+    
+    Args:
+        images: jax.Array of shape (4, 28, 28)
+        output_path: Path to save the output PNG
+    """
+    fig = create_2x2_grid(images)
+    fig.savefig(output_path, bbox_inches='tight', pad_inches=0.02)
+    plt.close(fig)

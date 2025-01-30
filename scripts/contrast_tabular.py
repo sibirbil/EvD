@@ -2,16 +2,13 @@ from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
 import create_datasets, logistic, langevin, nets, train, utils
-import scripts.mlp_fico_train as mlp_fico_train
+
 from datasets import Dataset
 import pandas as pd
 
 import jax
 import jax.random as random
 import jax.numpy as jnp
-import optax
-
-from functools import partial
 
 
 df, X, y, scaler = create_datasets.get_fico()
@@ -93,12 +90,25 @@ if len(generated_df) <500:
 
 import model_contrast_functions
 
-model_contrast_functions.compare_datasets(
+## Prints all the images one by one
+
+# model_contrast_functions.compare_datasets(
+#     data1=generated_df[-500:],
+#     data2=test_df[-500:],
+#     labels=('Generated Contrastive Data', 'Test Data')
+# )
+
+log_reg_test_pred = log_reg.predict(X_test)
+xgboost_test_pred = xgbclsfr.predict(X_test)
+print(f"On the test data predictions of XGBoost and logistic regression agree \
+      {(log_reg_test_pred == xgboost_test_pred).mean():.2%} ")
+
+model_contrast_functions.compare_datasets_grid(
     data1=generated_df[-500:],
     data2=test_df[-500:],
-    labels=('Generated Contrastive Data', 'Test Data')
-)
-
+    numerical_cols=['MaxDelqEver', 'NumTotalTrades', 'MSinceMostRecentTradeOpen', 'NumTradesOpeninLast12M'],
+    labels=('Generated Data', 'Test Data')
+    )
 
 
 # mlp = nets.MLP_with_dropout(features = [128, 32, 8, 2], dropout_rate = 0.2)
