@@ -60,7 +60,7 @@ def print_max_min_values(data, labels, dataset_name):
 
 
 ##################
-### Visualisations
+### Visualizations
 ##################
 
 
@@ -156,7 +156,7 @@ def side_by_side_boxplots(data1, data2, labels, title, x_label, y_label, font_si
 
 
 def feature_comparison_boxplots(similar_data, different_data, feature_names, title):
-    """Creates feature-wise boxplots comparing similar and different prediction datasets."""
+    """Creates feature-wise boxplots comparing similar and different prediction datasets"""
     n_features = similar_data.shape[1]
 
     plt.figure(figsize=(16, 6))
