@@ -1,6 +1,6 @@
 # Generating Samples to Question Trained Models
 
-## Overview
+
 This repository contains a collection of probing scenarios located in the `scripts/` directory. 
 
 ## Repository Structure
