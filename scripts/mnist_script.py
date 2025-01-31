@@ -121,7 +121,7 @@ def G(z):
     g1 = G1(x)
     g2 = G2(x)
     return g1 + g2 
-hypsG = G, jax.grad(G), etaG
+hypsG1 = G, jax.grad(G), etaG
 
 def G_function_counterfactual(
     model       : nn.Module,
@@ -144,14 +144,18 @@ def G_function_counterfactual(
 
     return jax.jit(lambda z : localizer(z) + main(z))
 
-import plotting
+betaG2 = 1.
+etaG2 = 0.001/betaG2
 
+anchor = vae_encoder(encoder_key, MNIST[1234]['x'])
+G2  = G_function_counterfactual(cnn, cts.params, anchor, 8, betaG2)
+hypsG2 = G2, jax.grad(G2), etaG2
 
 #z0 = vae_encoder(encoder_key, MNIST[125]['x'])
 z0 = random.normal(z0_key, shape = (10,))
-state_z = MALA_key, z0
+state_z = MALA_key, anchor
 
-_, traj_z = langevin.MALA_chain(state_z, hypsG, 10000)
+_, traj_z = langevin.MALA_chain(state_z, hypsG2, 10000)
 
 traj_x = jax.nn.sigmoid(jax.vmap(vae_decoder)(traj_z))
 

@@ -217,45 +217,61 @@ def feature_comparison_histograms(
 
 from matplotlib.gridspec import GridSpec
 
-def create_2x2_grid(images, figsize=(3.25, 3.25)):
+
+def create_mnist_grid(images, nrows, ncols, figsize=None):
     """
-    Create a tight 2x2 grid of MNIST images.
+    Create a tight grid of MNIST images with arbitrary dimensions.
     
     Args:
-        images: jax.Array of shape (4, 28, 28) containing MNIST images
-        figsize: Figure size in inches (default is half of double column width)
+        images: jax.Array of shape (N, 28, 28) containing MNIST images
+        nrows: Number of rows in the grid
+        ncols: Number of columns in the grid
+        figsize: Figure size in inches. If None, automatically calculated 
+                based on grid dimensions to fit double column width (6.5 inches)
     
     Returns:
         matplotlib.figure.Figure
     """
-    assert len(images) == 4, "Exactly 4 images required"
+    required_images = nrows * ncols
+    assert len(images) >= required_images, f"Need at least {required_images} images for {nrows}x{ncols} grid"
+    
+    # Auto-calculate figure size if not provided
+    if figsize is None:
+        # Base size on double column width (6.5 inches)
+        # Scale height proportionally to maintain square-ish cells
+        width = min(6.5, 2 * ncols)  # Cap width at double column width
+        height = width * (nrows / ncols)
+        figsize = (width, height)
     
     # Create figure with GridSpec
     fig = plt.figure(figsize=figsize, dpi=300)
-    gs = GridSpec(2, 2, figure=fig, hspace=0.05, wspace=0.05)
+    gs = GridSpec(nrows, ncols, figure=fig, hspace=0.05, wspace=0.05)
     
     # Plot each image
-    for i in range(4):
-        row = i // 2
-        col = i % 2
+    for i in range(required_images):
+        row = i // ncols
+        col = i % ncols
         ax = fig.add_subplot(gs[row, col])
         
         # Display image without interpolation for sharp pixels
         ax.imshow(images[i], cmap='gray', interpolation='none')
         ax.axis('off')
-        
-            
+    
     plt.tight_layout()
     return fig
 
-def save_2x2_grid(images, output_path='mnist_2x2.png'):
+def save_mnist_grid(images, nrows, ncols, output_path='mnist_grid.png', figsize=None):
     """
-    Save a 2x2 grid of MNIST images.
+    Save a grid of MNIST images.
     
     Args:
-        images: jax.Array of shape (4, 28, 28)
+        images: jax.Array of shape (N, 28, 28)
+        nrows: Number of rows in the grid
+        ncols: Number of columns in the grid
         output_path: Path to save the output PNG
+        figsize: Optional tuple of (width, height) in inches
     """
-    fig = create_2x2_grid(images)
+    fig = create_mnist_grid(images, nrows, ncols, figsize)
     fig.savefig(output_path, bbox_inches='tight', pad_inches=0.02)
     plt.close(fig)
+
