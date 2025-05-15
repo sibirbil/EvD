@@ -429,7 +429,11 @@ def get_housing():
 #### MISC SYNTHETIC DATA ####
 #############################
 
-from sklearn.datasets import make_moons
+from sklearn.datasets import make_moons, make_circles
+
+def concentric_dataset(N, noise = 0.1):
+    X,y  = make_circles((N,N), noise =noise, factor = 0.5, random_state = 42)
+    return X,y
 
 def moons_dataset(key = random.PRNGKey(42), n_samples =1000, noise  =0.1):
     X, y = make_moons(n_samples= n_samples, noise=noise, random_state = key[0])

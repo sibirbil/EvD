@@ -98,7 +98,7 @@ def G_function(
     model     : nn.Module,
     params,
     target    : int,
-    beta      : jnp.float_              # inverse temperature
+    beta      : float              # inverse temperature
     ):
     
     def G(x):
@@ -128,7 +128,7 @@ def G_function_counterfactual(
     params,
     anchor      : jax.Array,
     target      : int,
-    beta        : jnp.float_
+    beta        : float
     ):
 
     G = G_function(model, params, target, beta)
