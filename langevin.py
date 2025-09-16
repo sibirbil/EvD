@@ -3,7 +3,8 @@ import jax.numpy as jnp
 import jax.random as random
 from jax.tree_util import tree_map, tree_unflatten, tree_structure, tree_leaves, tree_reduce
 from functools import partial
-from typing import Tuple
+from typing import Tuple, Optional, List
+import torch
 
 
 # Function for testing 
@@ -22,8 +23,8 @@ def leaf_langevin(
     x       : jax.Array,
     g       : jax.Array,
     xi      : jax.Array,
-    eta     : jnp.float_,
-    clip_to : Tuple[jnp.float_ | None, jnp.float_ | None]
+    eta     : float,
+    clip_to : Tuple[float | None, float | None]
 ):
     
     step = x - eta*g + jnp.sqrt(2*eta)*xi
@@ -141,6 +142,85 @@ def nt_MALA(state, hyps, Nsteps):
     
     return (key, x), jax.tree.map(lambda *xs: jnp.stack(xs), *output)
      
+##################################
+## TORCH.TENSOR version of MALA ##
+##################################
+
+def torch_langevin_step(
+        x: torch.Tensor, 
+        g: torch.Tensor, 
+        eta: float, 
+        clip_to: List[Optional[float]] = [None, None]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Calculates the next step in Langevin dynamics for a single tensor.
+    Returns both the new position x_next and the random noise xi.
+    """
+    # Generate noise with same shape as x
+    xi = torch.randn_like(x)
+    
+    # Apply Langevin update: x - eta*g + sqrt(2*eta)*xi
+    x_next = x - eta * g + torch.sqrt(torch.tensor(2 * eta, device=x.device)) * xi
+    
+    # Apply clipping if specified
+    a, b = clip_to
+    if a is not None or b is not None:
+        x_next = torch.clamp(x_next, min=a, max=b)
+    
+    return x_next.detach(), xi
+
+
+def torch_MALA_step(x: torch.Tensor, hyps) -> torch.Tensor:
+    """
+    Performs a MALA step for a single tensor with Metropolis-Hastings acceptance.
+    """
+    func, grad_func, eta, *clip_to = (*hyps, None, None)[:5]
+    
+    # Compute gradient at current position
+    g = grad_func(x)
+    
+    # Propose new step using Langevin dynamics
+    x_proposed, xi = torch_langevin_step(x, g, eta, clip_to)
+    
+    # Compute gradient at proposed position
+    g_proposed = grad_func(x_proposed.requires_grad_())
+    
+    # Compute log proposal ratio
+    forward = -torch.sum(xi**2) / (4 * eta)
+    reverse = -torch.sum((x - x_proposed + eta * g_proposed)**2) / (4 * eta)
+    log_proposal_ratio = reverse - forward
+    
+    # Compute acceptance probability
+    log_acceptance_ratio = -func(x_proposed) + func(x) + log_proposal_ratio
+    acceptance_prob = torch.minimum(torch.tensor(1.0), torch.exp(log_acceptance_ratio))
+    
+    # Generate random uniform value for acceptance decision
+    uniform_sample = torch.rand(1).item()
+    accepted = uniform_sample < acceptance_prob.item()
+    
+    # Accept or reject proposal
+    x_next = x_proposed if accepted else x
+    
+    return x_next
+
+def torch_MALA_chain(x: torch.Tensor, hyps, NSteps: int) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+    """
+    PyTorch implementation of MALA chain for single tensors.
+    """
+    func, grad_func, eta, *clip_to = (*hyps, None, None)[:5]
+    eta = as_scheduler(eta)
+    
+    x.requires_grad_(True)
+    trajectory = []
+    
+    for step in range(NSteps):
+        lr = eta(step)
+        new_hyps = (func, grad_func, lr, *clip_to)
+        x = torch_MALA_step(x, new_hyps)
+        trajectory.append(x.detach())
+    
+    return x, torch.stack(trajectory)
+
 
 ######################################################
 # Below is an earlier version which only works with  #

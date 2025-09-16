@@ -57,7 +57,7 @@ def F_function(
     X       : jax.Array,
     y       : jax.Array,  #integer labels
     model   : nn.Module,
-    beta    : jnp.float_
+    beta    : float
     ):
     def F(params):
         logits = model.apply(params, X, is_training= False)
@@ -79,7 +79,7 @@ def G_function_risky(
     traj_params,    # a single PyTree
     target          : jax.Array,    # target softmax values of shape (k,)
     model           : nn.Module,
-    beta            : jnp.float_    # inverse temperature
+    beta            : float    # inverse temperature
 ):
     model_fn = partial(model.apply, is_training =False)
     def G(x):

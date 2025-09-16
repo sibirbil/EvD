@@ -156,7 +156,7 @@ def laplacian(image):
 def F_function(
     model   : nn.Module,
     ds      : Dataset,
-    beta    : jnp.float_ #inverse temperature 
+    beta    : float #inverse temperature 
     ):
     
     xs = ds['x']
@@ -182,9 +182,9 @@ def G_function(
     params_traj,            # a pytree of parameters with an extra leading dimension
     model     : nn.Module,
     label     : int,        # target label (an integer form 0 to 9)
-    beta      : jnp.float_, # inverse temperature multiplying all of 
-    const1    : jnp.float_, # constant in front of l1 regularization
-    const2    : jnp.float_  # constant multiplying the total variation regularization
+    beta      : float, # inverse temperature multiplying all of 
+    const1    : float, # constant in front of l1 regularization
+    const2    : float  # constant multiplying the total variation regularization
     ):
     
     @jax.jit
