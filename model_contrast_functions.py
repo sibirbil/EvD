@@ -1,4 +1,5 @@
 
+
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.svm import SVR
@@ -16,6 +17,9 @@ import nets, train, optax, utils
 import logistic, langevin
 import seaborn as sns
 import pandas as pd
+from typing import List, Tuple
+from scipy.stats import gaussian_kde
+import math
 
 
 def G_contrast_function(lin_reg, svr_model, beta):
@@ -65,6 +69,352 @@ def print_max_min_values(data, labels, dataset_name):
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
+
+
+def compare_datasets_gridAll_with_error(
+    original_data: pd.DataFrame,
+    all_runs: List[pd.DataFrame],
+    labels: Tuple[str, str] = ('Original Data', 'Generated (mean ± std)'),
+    max_features: int = 20,   # shown as 5x4 grid
+    bins: int = 60,           # (unused now; kept for API compatibility)
+    bar_width: float = 0.4,
+    xtick_fontsize: int = 10
+):
+    """
+    Grid comparison of original data vs generated runs with error bands/bars.
+    - Numerical: original shown as blue filled KDE; generated shown as orange mean KDE ± std band.
+    - Categorical: original shown as blue bars; generated shown as orange bars with yerr (std).
+
+    Parameters
+    ----------
+    original_data : pd.DataFrame
+        Reference dataset (after inverse transform if needed).
+    all_runs : List[pd.DataFrame]
+        List of generated datasets (same schema as original_data); one per random seed/run.
+    labels : tuple(str, str)
+        (label_original, label_generated) for legend.
+    max_features : int
+        Max number of features to display (fills a 5×4 grid).
+    bins : int
+        Kept for API compatibility (not used by KDE rendering).
+    bar_width : float
+        Width for categorical bars (each group shows original and generated).
+    xtick_fontsize : int
+        Font size for categorical x‑tick labels (helps when labels are long).
+    """
+
+    label_original, label_generated = labels
+
+    # Colors to match your original figures
+    BLUE = '#457B9D'     # original data (filled)
+    ORANGE = "darkorange"   # generated (mean line + band)
+
+    # Basic hygiene
+    original = original_data.replace([np.inf, -np.inf], np.nan).dropna()
+    runs = [df.replace([np.inf, -np.inf], np.nan).dropna() for df in all_runs if df is not None and len(df) > 0]
+    if len(runs) == 0:
+        raise ValueError("all_runs is empty or contains no valid data frames.")
+
+    # Detect columns by dtype from original data
+    categorical_cols = original.select_dtypes(include=['object', 'category']).columns.tolist()
+    numerical_cols = original.select_dtypes(include=['number']).columns.tolist()
+
+    # Pick up to max_features, prioritizing numeric then categorical to match typical usage
+    selected = numerical_cols[:max_features]
+    if len(selected) < max_features:
+        need = max_features - len(selected)
+        selected += categorical_cols[:need]
+
+    # Grid: 5 x 4 (or smaller if fewer features)
+    n_feats = len(selected)
+    rows = min(5, math.ceil(n_feats / 4))
+    cols = 4 if n_feats >= 4 else n_feats if n_feats > 0 else 1
+
+    fig, axes = plt.subplots(rows, cols, figsize=(20, 20))
+    if isinstance(axes, np.ndarray):
+        axes = axes.flatten()
+    else:
+        axes = [axes]
+
+    handles_for_legend, labels_for_legend = None, None
+
+    for i, col in enumerate(selected):
+        ax = axes[i]
+
+        if col in numerical_cols:
+            # --- NUMERICAL: Original = blue filled KDE; Generated = orange mean line + band ---
+            # Original (blue filled KDE)
+            try:
+                sns.kdeplot(original[col], label=label_original, fill=True, color=BLUE, ax=ax, alpha=0.5)
+            except Exception:
+                # Fallback to hist KDE if seaborn fails
+                sns.histplot(original[col], stat='density', color=BLUE, ax=ax, alpha=0.3)
+
+            # Build a common x-grid across original + all runs
+            vals_all = [original[col].dropna().values]
+            for run_df in runs:
+                if col in run_df.columns:
+                    vals_all.append(run_df[col].dropna().values)
+
+            # If we have at least some data for KDE across runs
+            if any(len(v) > 5 for v in vals_all):
+                xmin = min(np.min(v) for v in vals_all if len(v) > 0)
+                xmax = max(np.max(v) for v in vals_all if len(v) > 0)
+                if np.isfinite(xmin) and np.isfinite(xmax) and xmin < xmax:
+                    x_grid = np.linspace(xmin, xmax, 200)
+
+                    # Per-run KDE values on x_grid
+                    kde_matrix = []
+                    for run_df in runs:
+                        if col in run_df.columns:
+                            run_vals = run_df[col].dropna().values
+                            if len(run_vals) > 5 and np.unique(run_vals).size > 1:
+                                kde = gaussian_kde(run_vals)
+                                kde_matrix.append(kde(x_grid))
+                    if len(kde_matrix) > 0:
+                        kde_matrix = np.array(kde_matrix)
+                        mean_kde = kde_matrix.mean(axis=0)
+                        std_kde  = kde_matrix.std(axis=0)
+
+                        # Generated (orange mean line + band)
+                        ax.plot(x_grid, mean_kde, color=ORANGE, label=label_generated)
+                        ax.fill_between(x_grid, mean_kde - std_kde, mean_kde + std_kde,
+                                        color=ORANGE, alpha=0.25)
+
+            ax.set_title(f"Distribution of {col}", fontsize=12)
+            ax.set_xlabel(col)
+            ax.set_ylabel("Density")
+            ax.grid(alpha=0.3)
+
+        else:
+            # --- CATEGORICAL: Original = blue bars; Generated = orange bars with error bars ---
+            # Compute original proportions
+            orig_counts = original[col].value_counts(normalize=True) * 100.0
+
+            # Collect all categories across original + runs
+            cats = set(orig_counts.index)
+            per_run_counts = []
+            for run_df in runs:
+                if col in run_df.columns and len(run_df[col]) > 0:
+                    cnt = run_df[col].value_counts(normalize=True) * 100.0
+                    per_run_counts.append(cnt)
+                    cats.update(cnt.index)
+
+            cats = sorted(list(cats))
+            positions = np.arange(len(cats))
+
+            # Generated means and stds across runs
+            gen_means = []
+            gen_stds  = []
+            for c in cats:
+                vals = [cnt.get(c, 0.0) for cnt in per_run_counts] if len(per_run_counts) > 0 else [0.0]
+                gen_means.append(np.mean(vals))
+                gen_stds.append(np.std(vals))
+            gen_means = np.array(gen_means)
+            gen_stds  = np.array(gen_stds)
+
+            # Original bars (blue)
+            orig_vals = np.array([orig_counts.get(c, 0.0) for c in cats])
+            ax.bar(positions - bar_width/2, orig_vals, width=bar_width, color=BLUE, alpha=0.7, label=label_original)
+
+            # Generated bars with error bars (orange)
+            ax.bar(positions + bar_width/2, gen_means, yerr=gen_stds, capsize=4,
+                   width=bar_width, color=ORANGE, alpha=0.8, label=label_generated)
+
+            ax.set_xticks(positions)
+            ax.set_xticklabels(cats, rotation=45, ha='right', fontsize=xtick_fontsize)
+            ax.set_title(f"{col} Distribution", fontsize=12)
+            ax.set_ylabel("Percentage")
+            ax.set_xlabel(col)
+            ax.grid(axis="y", linestyle="--", alpha=0.7)
+
+        # Capture legend handles once
+        if i == 0:
+            handles_for_legend, labels_for_legend = ax.get_legend_handles_labels()
+        # Remove individual legends to keep the layout clean
+        ax.legend().remove()
+
+    # Remove any unused axes in the grid
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
+
+    # Global legend (bottom center)
+    if handles_for_legend and labels_for_legend:
+        fig.legend(handles_for_legend, labels_for_legend,
+                   loc='lower center', ncol=2, fontsize=12, frameon=False)
+
+    plt.tight_layout(rect=[0, 0.03, 1, 1])  # leave room for the legend
+    plt.show()
+
+def compare_datasets_with_error(
+    factual: pd.DataFrame,                 # original data
+    all_runs: list,                        # list[pd.DataFrame] synthetic runs
+    numerical_cols=None,
+    categorical_cols=None,
+    cols: int = 4,                         # columns in grid
+    max_plots: int = 8,                    # cap total number of subplots
+    bins: int = 60,                        # numeric density bins
+    bar_width: float = 0.35,               # slim categorical bars
+    xtick_fontsize: int = 10               # smaller category labels
+):
+    """
+    Numerical: Original density (line) vs generated mean density ± std (shaded).
+    Categorical: Original proportions vs generated mean ± std (error bars).
+    Grid size adapts to the number of plotted features.
+    """
+
+    # Clean original
+    factual = factual.replace([np.inf, -np.inf], np.nan).dropna()
+
+    # Infer columns if not provided
+    if numerical_cols is None:
+        numerical_cols = factual.select_dtypes(include=['number']).columns.tolist()
+    if categorical_cols is None:
+        categorical_cols = factual.select_dtypes(include=['object', 'category']).columns.tolist()
+
+    # Choose up to max_plots features (numerical first, then categorical)
+    selected = []
+    for col in numerical_cols:
+        selected.append((col, 'num'))
+        if len(selected) >= max_plots:
+            break
+    if len(selected) < max_plots:
+        for col in categorical_cols:
+            selected.append((col, 'cat'))
+            if len(selected) >= max_plots:
+                break
+
+    if len(selected) == 0:
+        print("No features to plot.")
+        return
+
+    # Compute grid size
+    total = len(selected)
+    rows = int(np.ceil(total / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(4.5*cols, 3.6*rows))
+    if isinstance(axes, np.ndarray):
+        axes = axes.flatten()
+    else:
+        axes = np.array([axes])
+
+    # Style
+    plt.rc('font', size=12)
+    plt.rc('axes', titlesize=14)
+    plt.rc('axes', labelsize=12)
+    plt.rc('xtick', labelsize=xtick_fontsize)
+    plt.rc('ytick', labelsize=12)
+    plt.rc('legend', fontsize=12)
+    plt.rc('figure', titlesize=14)
+
+    col_orig = '#457B9D'
+    col_gen  = 'orange'
+
+    def density_on_grid(values, lo, hi, nbins):
+        hist, edges = np.histogram(values, bins=nbins, range=(lo, hi), density=True)
+        centers = (edges[:-1] + edges[1:]) / 2
+        return centers, hist
+
+    # Plot
+    for i, (col, kind) in enumerate(selected):
+        ax = axes[i]
+
+        if kind == 'num':
+            # collect run values for col
+            run_vals = []
+            for df_run in all_runs:
+                if col in df_run.columns:
+                    v = df_run[col].replace([np.inf, -np.inf], np.nan).dropna().to_numpy()
+                    if v.size > 0:
+                        run_vals.append(v)
+            if not run_vals:
+                ax.set_visible(False)
+                continue
+
+            orig_v = factual[col].replace([np.inf, -np.inf], np.nan).dropna().to_numpy()
+            if orig_v.size == 0:
+                ax.set_visible(False)
+                continue
+
+            lo = min(np.min(orig_v), *(np.min(v) for v in run_vals))
+            hi = max(np.max(orig_v), *(np.max(v) for v in run_vals))
+            if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
+                ax.set_visible(False)
+                continue
+
+            # original density (line)
+            x_o, d_o = density_on_grid(orig_v, lo, hi, bins)
+            ax.plot(x_o, d_o, color=col_orig, linewidth=1.8, label='Original')
+
+            # generated mean ± std
+            mats = []
+            for v in run_vals:
+                _, d = density_on_grid(v, lo, hi, bins)
+                mats.append(d)
+            mats = np.stack(mats, axis=0)
+            mean_d = mats.mean(axis=0)
+            std_d  = mats.std(axis=0)
+
+            ax.plot(x_o, mean_d, color=col_gen, linewidth=1.8, label='Generated (mean)')
+            ax.fill_between(x_o, mean_d - std_d, mean_d + std_d, color=col_gen, alpha=0.25, label='±1σ')
+
+            ax.set_title(f'Distribution of {col}')
+            ax.set_xlabel(col)
+            ax.set_ylabel('Density')
+            ax.grid(alpha=0.3)
+
+        else:
+            # categorical
+            orig_counts = factual[col].value_counts(normalize=True)
+            cats = set(orig_counts.index)
+            run_counts = []
+            for df_run in all_runs:
+                if col in df_run.columns:
+                    c = df_run[col].value_counts(normalize=True)
+                    run_counts.append(c)
+                    cats.update(c.index)
+            cats = sorted(cats)
+            if len(cats) == 0:
+                ax.set_visible(False)
+                continue
+
+            orig_props = np.array([orig_counts.get(c, 0.0) for c in cats]) * 100.0
+            gen_means, gen_stds = [], []
+            for c in cats:
+                vals = [rc.get(c, 0.0) * 100.0 for rc in run_counts]
+                gen_means.append(np.mean(vals) if vals else 0.0)
+                gen_stds.append(np.std(vals) if vals else 0.0)
+            gen_means = np.array(gen_means)
+            gen_stds  = np.array(gen_stds)
+
+            idx = np.arange(len(cats))
+            ax.bar(idx - bar_width/2, orig_props, width=bar_width, color=col_orig, alpha=0.85, label='Original')
+            ax.bar(idx + bar_width/2, gen_means, yerr=gen_stds, capsize=4, width=bar_width, color=col_gen, alpha=0.85, label='Generated')
+
+            ax.set_xticks(idx)
+            ax.set_xticklabels(cats, rotation=25, ha='right', fontsize=xtick_fontsize)
+            ax.set_ylabel('Percentage')
+            ax.set_xlabel(col)
+            ax.set_title(f'Comparison of {col}')
+            ax.grid(axis='y', linestyle='--', alpha=0.7)
+
+        if i == 0:
+            handles, labels_local = ax.get_legend_handles_labels()
+
+    # remove any extra axes
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
+
+    try:
+        fig.legend(handles, labels_local, loc='lower center', ncol=2, fontsize=13, frameon=False)
+    except Exception:
+        pass
+
+    plt.tight_layout(rect=[0, 0.04, 1, 1])
+    plt.show()
+
+
+
+
 
 def scatter_plot_with_reference(x, y, x_label, y_label, title, color="blue", alpha=0.6, font_size = 14):
     """Plots a scatter plot with a reference y=x line."""
