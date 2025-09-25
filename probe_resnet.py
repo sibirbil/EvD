@@ -27,27 +27,15 @@ def transform(x:Tensor):
 
     return x.unsqueeze(0)
 
-#vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse")
 vae = AutoencoderTiny.from_pretrained("madebyollin/taesd3")
 vae.to(device=device)
 vae.eval()
-#vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-ema")
 gen = vae.decoder
 gen.eval()
-# gan = torch.hub.load('facebookresearch/pytorch_GAN_zoo:hub', 'PGAN',
-#                      model_name = 'celebAHQ-256', pretrained = True)
-
-# gangen : nn.Module = gan.netG
-# gangen.eval()
-# resnet.eval()
-
-# gangen.to(device = device)
 resnet.eval()
 resnet.to(device = device)
 
-#z0 = torch.randn([1, 512], device = device, requires_grad=True)
 z0 = torch.randn([1,16,4,4], device = device, requires_grad=True)
-#z0 = torch.randn([1,4,4,4], device = device, requires_grad=True)
 
 def G_function(
     model       : nn.Module,
