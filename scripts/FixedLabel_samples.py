@@ -1,3 +1,4 @@
+
 import create_datasets
 import nets
 import jax
@@ -7,6 +8,7 @@ import pandas as pd
 import numpy as np
 
 from functools import partial
+from collections import defaultdict
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -17,8 +19,10 @@ import utils
 import summarize_results
 
 
-key = random.PRNGKey(1826)  # yeniceri ocaginin kapatilmasi ya da ilk sadece matematik dergisi CRELLE's journal'in kurulmasi
+
 np.random.seed(44)  # NumPy's random seed
+base_key = random.PRNGKey(1826)
+
 
 
 adult, preprocessor, df  = create_datasets.get_adult()  # check the output signature of the function if it stops working
@@ -71,7 +75,7 @@ original_indices = filtered_rows.index.tolist()
 ########################################################
 ########################################################
 
-params_state = key, params0
+params_state = base_key, params0
 F = logistic.F_function(X_train, y_train, linear, betaF)
 hypsF = F, jax.grad(F), etaF
 _, traj_params = langevin.MALA_chain(params_state, hypsF, N_params)
@@ -84,6 +88,11 @@ etaG = 0.01/betaG
 etaG = utils.sqrt_decay(etaG)
 N_x = 5000
 
+
+key_list = random.split(base_key, 50)
+
+# Store all counterfactuals
+results_dict = {}
 
 # factual.csv includes some samples for test
 factual_info = summarize_results.read_sample("factual.csv")
@@ -101,32 +110,33 @@ for _, row in factual_info.iterrows():
     
     x_b = X_train[record_index]  
     xs = X_train[record_index]  
-    state_x = key, x_b
     
-    #neg_predictor = logistic.negation_logistic_estimator(params0, linear)
-
-
     G = logistic.G_function(
         traj_params, linear, logistic.constant_estimator(1.),
         logistic.cross_entropy, partial(logistic.l2_reg, C = 0.01, x0 = xs),
         betaG)
-    #G = logistic.G_function(traj_params, linear, neg_predictor, logistic.cross_entropy, partial(logistic.l2_reg, C = 0., x0 = x0), betaG)
 
     indices = jnp.array([0, 1, 2])  # Modify as needed
     lower_bound = jnp.zeros_like(xs).at[indices].set(lower_bounds)
     upper_bound = jnp.ones_like(xs).at[indices].set(upper_bounds)
 
-    hypsG = G, jax.grad(G), etaG, lower_bound, upper_bound 
+    hypsG = G, jax.grad(G), etaG, lower_bound, upper_bound
 
-    _, traj_x = langevin.MALA_chain(state_x, hypsG, N_x)
+    counterfactual_runs = []
 
-    ys = log_reg.predict(traj_x)
-    data_path = jnp.column_stack([traj_x, ys])
-    data_path_df = pd.DataFrame(data_path, columns= adult.columns)
-    inverted = create_datasets.invert_adult(data_path_df, preprocessor)
+    for key_i in key_list:
+        
+        state_x = key_i, x_b
+        _, traj_x = langevin.MALA_chain(state_x, hypsG, N_x)
+
+        ys = log_reg.predict(traj_x)
+        data_path = jnp.column_stack([traj_x, ys])
+        data_path_df = pd.DataFrame(data_path, columns= adult.columns)
+        inverted = create_datasets.invert_adult(data_path_df, preprocessor)
+        counterfactual_runs.append(inverted)
     
-    # summarize_results.visualize_samples(inverted[-500:])
 
+    results_dict[original_index] = counterfactual_runs
     # Prepare factual data
     factual = df.iloc[original_index].to_dict()
     
@@ -139,14 +149,21 @@ for _, row in factual_info.iterrows():
     factual["relationship"] = relationship_dict.get(factual.get("relationship"), factual.get("relationship"))
 
     numerical_features = ["age", "educational-num", "hours-per-week"]
-    categorical_features = ["race", "gender", "native-country", "workclass", "occupation", "relationship"]
+    categorical_features = ["race", "gender", "native-country", "workclass", "occupation"]
 
 
-    # plot the results for the current record
-    summarize_results.summary_plots(factual, inverted[-500:],  
-                                    numerical_features=numerical_features, 
-                                    categorical_features=categorical_features)
+    # collect all 500-length slices from each run
+    inverted_runs = [df_run[-500:] for df_run in counterfactual_runs]
+
+    # plot the results with error bars
+    summarize_results.summary_plots_with_error(
+        factual,
+        inverted_runs,
+        numerical_features=numerical_features,
+        categorical_features=categorical_features
+    )
 
     print(f"Processed record index: {record_index}")
+
 
 
