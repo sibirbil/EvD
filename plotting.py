@@ -410,3 +410,130 @@ def plot_wine_features(X_train, X_test, y_train, y_test, generated_samples,
     
     plt.tight_layout()
     return fig, ax
+
+from typing import Optional, List
+import math
+import torch
+
+def tensor_grid_visualize(tensor_list: List[torch.Tensor], 
+    titles: Optional[List[str]] = None,
+    grid_shape: Optional[Tuple[int, int]] = None,
+    figsize: Tuple[int, int] = (15, 10),
+    denormalize: bool = True,
+    save_path: Optional[str] = None,
+    title_fontsize: int = 10,
+    suptitle: Optional[str] = None,
+    spacing: float = 0.05
+    ) -> plt.Figure:
+    """
+    Create a grid visualization from a list of PyTorch tensors.
+    
+    Args:
+        tensor_list: List of tensors, each of shape [C, H, W] where C=3 (RGB)
+        titles: Optional list of titles for each image
+        grid_shape: Optional (rows, cols) for grid layout. If None, auto-calculated
+        figsize: Figure size as (width, height)
+        denormalize: Whether to denormalize ImageNet-normalized tensors
+        save_path: Optional path to save the figure
+        title_fontsize: Font size for subplot titles
+        suptitle: Optional main title for the entire figure
+    
+    Returns:
+        matplotlib Figure object
+    """
+    if not tensor_list:
+        raise ValueError("tensor_list cannot be empty")
+    
+    n_images = len(tensor_list)
+    
+    # Auto-calculate grid shape if not provided
+    if grid_shape is None:
+        cols = math.ceil(math.sqrt(n_images))
+        rows = math.ceil(n_images / cols)
+        grid_shape = (rows, cols)
+    
+    rows, cols = grid_shape
+    
+    # Validate grid can accommodate all images
+    if rows * cols < n_images:
+        raise ValueError(f"Grid shape {grid_shape} too small for {n_images} images")
+    
+    if titles:
+        hspace = max(spacing * 3, 0.15)  # More vertical space for titles
+    else:
+        hspace = spacing
+    # Create figure and subplots
+    fig, axes = plt.subplots(rows, cols, figsize=figsize)
+    
+    plt.subplots_adjust(
+        left=0.02,
+        bottom=0.02,
+        right=0.98,
+        top=0.95 if suptitle else 0.98,
+        wspace=spacing,
+        hspace=hspace
+    )
+
+    # Handle single subplot case
+    if rows == 1 and cols == 1:
+        axes = [axes]
+    elif rows == 1 or cols == 1:
+        axes = axes.flatten()
+    else:
+        axes = axes.flatten()
+    
+    # ImageNet normalization parameters for denormalization
+    imagenet_mean = torch.tensor([0.485, 0.456, 0.406])
+    imagenet_std = torch.tensor([0.229, 0.224, 0.225])
+    
+    for i, tensor in enumerate(tensor_list):
+        if tensor.dim() not in [3, 4]:
+            raise ValueError(f"Tensor {i} must be 3D [C,H,W] or 4D [B,C,H,W]")
+        
+        # Handle batch dimension
+        if tensor.dim() == 4:
+            if tensor.shape[0] != 1:
+                raise ValueError(f"Tensor {i} batch size must be 1, got {tensor.shape[0]}")
+            tensor = tensor.squeeze(0)
+        
+        # Clone to avoid modifying original
+        img_tensor = tensor.clone()
+        
+        # Denormalize if requested and tensor appears to be normalized
+        if denormalize and tensor.min() < 0:
+            # Reshape normalization parameters to match tensor dimensions
+            mean = imagenet_mean.view(3, 1, 1).to(tensor.device)
+            std = imagenet_std.view(3, 1, 1).to(tensor.device)
+            img_tensor = img_tensor * std + mean
+        
+        # Clamp values to [0, 1] range for display
+        img_tensor = torch.clamp(img_tensor, 0, 1)
+        
+        # Convert to numpy and transpose for matplotlib (H, W, C)
+        img_np = img_tensor.permute(1, 2, 0).cpu().numpy()
+        
+        # Display image
+        axes[i].imshow(img_np)
+        axes[i].axis('off')
+        
+        # Add title if provided
+        if titles and i < len(titles):
+            axes[i].set_title(titles[i], fontsize=title_fontsize)
+    
+    # Hide unused subplots
+    for i in range(n_images, len(axes)):
+        axes[i].axis('off')
+    
+    # Add main title if provided
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=title_fontsize + 4)
+    
+    plt.tight_layout()
+    
+    # Save if path provided
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Figure saved to {save_path}")
+    
+    return fig
+

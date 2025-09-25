@@ -264,7 +264,7 @@ def convolve_and_diff(
     normal distribution with fixed variance sigma^2. This is equal to the
     correlation of F and gaussian noise itself, i.e. ∫F(x + ε)ε dε, which
     is estimated by random Gaussian samples, making sure -/+ ε are included
-    as pairs, to increase the stability of the estimation.
+    (antithetic sampling), to reduce variance in the estimation.
     """
     x_size = x[0].shape
     if grad_func is None:
@@ -274,7 +274,7 @@ def convolve_and_diff(
 
         T_pos = func(x_pos)
         T_neg = func(x_neg)
-        # Below approximates the gradient of ∫F(x + ε)ε dε for F = func
+        # Below approximates the gradient of ∫F(x + σε)ε dε for F = func
         # where ε ~ N(0,I). Better behaved than ∇F when F is a step function.
         g = (T_pos - T_neg) @ noise_base/(2*sigma*n_samples)
         g = g[None,:]

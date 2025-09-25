@@ -6,16 +6,17 @@ from torchvision.transforms import CenterCrop, Normalize, Resize
 import torch.func as func
 from matplotlib import pyplot as plt 
 from diffusers.models import AutoencoderKL, AutoencoderTiny
-from typing import Union
+from typing import Union, Tuple
 import langevin
+from datasets import load_dataset
 
 Tensor = torch.Tensor
 
 device = 'mps' #or 'cpu'
 
-resnet = resnet152(weights = ResNet152_Weights.IMAGENET1K_V2)
+resnet = resnet50(weights = ResNet50_Weights.IMAGENET1K_V2)
 def transform(x:Tensor):
-    x = torch.nn.functional.interpolate(x, size=232, mode='bilinear', align_corners=False)
+    x = torch.nn.functional.interpolate(x, size=256, mode='bilinear', align_corners=False)
     x = x.squeeze(0)
     x = CenterCrop(224)(x)
     
@@ -52,7 +53,7 @@ def G_function(
     model       : nn.Module,
     generator   : nn.Module,
     beta        : float,
-    l2_reg      : float,
+    l1_reg      : float,
     label       : int,
     anchor_z    : Union[Tensor, float] = 0. # float will be broadcast 
 ):
@@ -61,15 +62,15 @@ def G_function(
     criterion = nn.CrossEntropyLoss()
     tensor_label = torch.tensor([label], device = device)
     def G(z: Tensor) -> Tensor:
-        noise = torch.randn_like(z)*0.5
+        noise = torch.randn_like(z)*0.05
         zprime = z + noise
         x = generator(zprime)
         x = torch.clamp(x, 0, 1)
         logits = model(transform(x))
         loss = criterion(logits, tensor_label)
-        sq_dist = torch.mean((zprime - anchor_z).pow(2))
+        dist = torch.mean((zprime - anchor_z).abs())
         rce = reconst_error(zprime)
-        return beta*(loss + l2_reg*sq_dist + rce)
+        return beta*(loss + l1_reg*dist + rce)
 
     return G
 
@@ -117,8 +118,9 @@ def probabilities(z: Tensor):
 
 def reconst_error(z: Tensor):
     x = torch.clip(vae.decoder(z),0,1)
-    zprime = vae.encoder(x)
-    return nn.functional.mse_loss(z,zprime)
+    x = Resize(256)(x.cpu()).to(device)
+    xprime = vae.decoder(vae.encoder(x))
+    return nn.functional.mse_loss(x,xprime)
 
 def search_loop(
     z               : Tensor,
@@ -126,33 +128,42 @@ def search_loop(
     prob_threshold  : float,    # the criterion to get out of langevin loop
     beta            : float,
     step_size       : float,
-    l2_reg          : float,
+    l1_reg          : float,
     label           : int,
     anchor          : Union[Tensor, float]
 )-> Tensor:
     print(f"beta:{beta}, step_size:{step_size}")
-    funcG = G_function(resnet, gen, beta, l2_reg, label, anchor)
-    gradG = differentiate(funcG)
-    etaG = step_size/beta
-    hypsG = funcG, gradG, etaG, -4,4
     prob = 0.
     while prob < prob_threshold:
+        funcG = G_function(resnet, gen, beta, l1_reg, label, anchor)
+        gradG = differentiate(funcG)
+        etaG = step_size/beta
+        hypsG = funcG, gradG, etaG, -4,4
+        print(f"step_size: {step_size:.4f}, beta: {beta:.2f}, l2_reg:{l1_reg:.2f}")
         for i in range(iter_n):
             z = langevin.torch_MALA_step(z, hypsG)
             if i%10==9:
-                print(funcG(z).item(), '\t', reconst_error(z).item())
+                print(f"G = {funcG(z).item()/beta:.4f}, \t reconst {reconst_error(z).item():.4f},\
+                anchor_dist {torch.mean((z - anchor).pow(2)).item():.4f}")
         prob = probabilities(z)[label].item()
         print("probability: ", prob)
+        step_size = step_size*0.9
+        l1_reg = l1_reg*0.9
+        beta = beta*1.1
     return z
 
 
-def main():
-    sizes       = [   10,      16,     24,     32,     32]
-    prob_crits  = [  .4,     .5,     .6,     .7,     .75,     .8]
-    betas       = [  100,     150,      300,     450,     700,    1000]
-    step_sizes  = [  .5,     .25,    .1,    .05,   .025,   .001]
-    l2_regs     = [  .00,    .01,   .05,    .1,     .2,     .3]
-    label =1
+def main(label = 1):
+    #sizes       = [   4,      8,      16,     32]
+    sizes        = [ 5,  8,  12,  24,  32]
+    #prob_crits  = [  .6,     .7,     .8,     .9]
+    prob_crits   = [ .7, .8, .9, .9, .9]
+    #betas       = [  20,     40,      80,    160]
+    betas        = [  50, 100, 200, 400, 800]
+    #step_sizes  = [  .2,     .1,    .05,    .025]
+    step_sizes   = [ .2, .1, 0.05, 0.02, 0.01]
+    #l1_regs     = [  .00,    .1,   .5,    1.]
+    l1_regs      = [ .0, 0.1, 1., 1.5, 2.]
     z = torch.randn(
         [1,16,sizes[0],sizes[0]], 
         device = device, 
@@ -169,8 +180,8 @@ def main():
         prob_thresh = prob_crits[i]
         beta = betas[i]
         step_size = step_sizes[i]
-        l2_reg = l2_regs[i]
-        z :Tensor = search_loop(z, 100, prob_thresh, beta, step_size, l2_reg, label, anchor)
+        l1_reg = l1_regs[i]
+        z :Tensor = search_loop(z, 100, prob_thresh, beta, step_size, l1_reg, label, anchor)
         zs.append(z)
         probs = probabilities(z)
         print("high prob classes: ",torch.where(probs>0.05)[0])
@@ -178,4 +189,5 @@ def main():
         ps.append(prob)
         show_image(z)
     return zs, ps
-    
+
+
