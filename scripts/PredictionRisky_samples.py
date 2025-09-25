@@ -23,6 +23,7 @@ df, X, y, scaler = create_datasets.get_fico()
 N = X.shape[0]
 key = random.key(24)
 init_key, train_key, mala_key, noise_key, x0_key = random.split(key, 5)
+                                                                         
 
 
 ## Get the data in JAX format
@@ -57,7 +58,7 @@ def F_function(
     X       : jax.Array,
     y       : jax.Array,  #integer labels
     model   : nn.Module,
-    beta    : float
+    beta    : jnp.float_
     ):
     def F(params):
         logits = model.apply(params, X, is_training= False)
@@ -79,7 +80,7 @@ def G_function_risky(
     traj_params,    # a single PyTree
     target          : jax.Array,    # target softmax values of shape (k,)
     model           : nn.Module,
-    beta            : float    # inverse temperature
+    beta            : jnp.float_    # inverse temperature
 ):
     model_fn = partial(model.apply, is_training =False)
     def G(x):
@@ -95,61 +96,114 @@ etaG = 0.01/betaG
 etaG = utils.sqrt_decay(etaG)
 N_data = 20000
 
-#x0 = jax.random.uniform(x0_key, shape = X_train[0].shape)
-x0 = X_train[0]
-x_state = x0_key, x0
+# Columns without the label column (assumed first)
+original_data = df.drop(df.columns[0], axis=1)
 
 G_risky = G_function_risky(traj_params, jnp.array([1.0, 1.0]), mlp, betaG)
 hypsG_risky = G_risky, jax.grad(G_risky), etaG, 0., 1.
-_, risky_traj_x = langevin.MALA_chain(x_state, hypsG_risky, N_data)
+x0 = X_train[0]
 
-risky_traj_logits = mlp.apply(ts.params, risky_traj_x, is_training = False)
-risky_traj_probs = jax.nn.softmax(risky_traj_logits)
-risky_traj_preds = jnp.argmax(risky_traj_probs, axis = -1)
-
-generated_sample = risky_traj_x[-500:,]
-inverted = scaler.inverse_transform(generated_sample)
+key_list = random.split(x0_key, 50)
+all_inverted_runs = []   # list of DataFrames (each last 500 samples, inverse-scaled)
+all_y_prob_runs = []     # list of arrays of p(class=1) for the last 500 samples
 
 
-original_data = df.drop(df.columns[0], axis=1)
+for key_i in key_list:
+    x_state_i = key_i, x0
+    _, traj_i = langevin.MALA_chain(x_state_i, hypsG_risky, N_data)
+    # model probabilities for this run
+    risky_traj_logits_i = mlp.apply(ts.params, traj_i, is_training=False)
+    risky_traj_probs_i = jax.nn.softmax(risky_traj_logits_i)
+
+    # take last 500
+    generated_sample_i = traj_i[-500:, ]
+    y_prob_i = risky_traj_probs_i[-500:, 1]  # probability of positive class
+
+    # inverse transform last 500
+    inverted_i = scaler.inverse_transform(generated_sample_i)
+    # columns without the (first) label column
+    original_data = df.drop(df.columns[0], axis=1)
+    inverted_df_i = pd.DataFrame(inverted_i, columns=original_data.columns)
+
+    all_inverted_runs.append(inverted_df_i)
+    all_y_prob_runs.append(numpy.array(y_prob_i))
+    
+    
+##x0 = jax.random.uniform(x0_key, shape = X_train[0].shape)
+#x_state = x0_key, x0
+#_, risky_traj_x = langevin.MALA_chain(x_state, hypsG_risky, N_data)
+#risky_traj_logits = mlp.apply(ts.params, risky_traj_x, is_training = False)
+#risky_traj_probs = jax.nn.softmax(risky_traj_logits)
+#risky_traj_preds = jnp.argmax(risky_traj_probs, axis = -1)
+
+#generated_sample = risky_traj_x[-500:,]
+#inverted = scaler.inverse_transform(generated_sample)
 
 
-data_path = jnp.column_stack([risky_traj_probs[:, 1] , risky_traj_x])
-data_path_df = pd.DataFrame(data_path, columns = df.columns)
+#original_data = df.drop(df.columns[0], axis=1)
+
+
+#data_path = jnp.column_stack([risky_traj_probs[:, 1] , risky_traj_x])
+#data_path_df = pd.DataFrame(data_path, columns = df.columns)
 
 # Adjust columns for the inverted dataset
-inverted_df = pd.DataFrame(inverted, columns=original_data.columns)
-y_prob = risky_traj_probs[-500:, 1] 
+#inverted_df = pd.DataFrame(inverted, columns=original_data.columns)
+#y_prob = risky_traj_probs[-500:, 1] 
 
 
-mean_y_prob = numpy.mean(y_prob)       
-std_y_prob = numpy.std(y_prob)  
+#mean_y_prob = numpy.mean(y_prob)       
+#std_y_prob = numpy.std(y_prob)  
 
-print(f"Mean: {mean_y_prob}")
-print(f"Standard Deviation: {std_y_prob}")
+# ---------------------------
+# Aggregate simple stats across runs (optional; keep your plotting separate)
+# ---------------------------
+y_prob_all = numpy.concatenate(all_y_prob_runs, axis=0)
+mean_y_prob = numpy.mean(y_prob_all)
+std_y_prob = numpy.std(y_prob_all)
+print(f"Across 30 runs — mean p(class=1) over last 500 samples/run: {mean_y_prob:.4f}")
+print(f"Across 30 runs — std  p(class=1) over last 500 samples/run: {std_y_prob:.4f}")
 
-
-# Plot distribution
+# Histogram (aggregated across runs) — you can keep or remove
 plt.figure(figsize=(10, 6))
-plt.hist(y_prob , bins=20, edgecolor='black', color='skyblue', alpha=0.7)
+plt.hist(y_prob_all, bins=20, edgecolor='black', color='skyblue', alpha=0.7)
 plt.axvline(0.5, color='red', linestyle='dashed', linewidth=1, label='0.5')
-
 plt.xlabel('Prediction Probabilities')
 plt.ylabel('Frequency')
-plt.title('Distribution of Prediction Probabilities Around 0.5')
+plt.title('Distribution of Prediction Probabilities (Aggregated over 30 runs)')
 plt.legend()
 plt.show()
 
-## Check the maximum and minimum values in the synthetic data and compare it with the original data
-model_contrast_functions.print_max_min_values(inverted, original_data.columns, "Synthetic Data")
-model_contrast_functions.print_max_min_values(original_data.to_numpy(), original_data.columns, "Original Data")
 
-if isinstance(inverted, numpy.ndarray):
-    inverted = pd.DataFrame(inverted, columns=original_data.columns)
+# ---------------------------
+# Max/min & dataset comparisons (use concatenated synthetic set)
+# ---------------------------
+synthetic_concat = pd.concat(all_inverted_runs, ignore_index=True)
+model_contrast_functions.print_max_min_values(
+    synthetic_concat.to_numpy(), original_data.columns, "Synthetic Data (30 runs, concatenated)"
+)
+model_contrast_functions.print_max_min_values(
+    original_data.to_numpy(), original_data.columns, "Original Data"
+)
 
-# Compare datasets
-model_contrast_functions.compare_datasets(data1=original_data, data2=inverted)
+# Compare datasets (using concatenated synthetic for now)
+model_contrast_functions.compare_datasets_with_error(
+    factual=original_data,
+    all_runs=all_inverted_runs,
+    cols=4,
+    max_plots=8,           # keep the old 2x4 look
+    bins=60,
+    bar_width=0.35,
+    xtick_fontsize=10
+)
 
+model_contrast_functions.compare_datasets_gridAll_with_error(
+    original_data=original_data,
+    all_runs=all_inverted_runs,
+    labels=('Original Data', 'Generated (mean ± std)'),
+    max_features=20,          # 5x4 grid
+    bins=60,
+    bar_width=0.4,
+    xtick_fontsize=10
+)
 
-model_contrast_functions.compare_datasets_gridAll(data1=original_data, data2=inverted)
 
